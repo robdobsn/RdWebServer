@@ -8,6 +8,8 @@
 
 #pragma once
 
+#ifndef ESP8266
+
 #include <stdint.h>
 #include <vector>
 #include <WString.h>
@@ -200,3 +202,5 @@ private:
     void unmaskData();
 
 };
+
+#endif

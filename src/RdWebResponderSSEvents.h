@@ -8,29 +8,29 @@
 
 #pragma once
 
-#ifndef ESP8266
-
 #include <WString.h>
 #include "RdWebResponder.h"
 #include <RdWebRequestParams.h>
 #include <RdWebConnection.h>
 #include <RdWebSocketLink.h>
-#include <RdWebDataFrame.h>
+#include <RdWebSSEvent.h>
 #include <Logger.h>
 #include <ThreadSafeQueue.h>
-#include "RdWebInterface.h"
 
 class RdWebHandler;
 class RdWebServerSettings;
 class ProtocolEndpointManager;
 
-class RdWebResponderWS : public RdWebResponder
+// Callback function for server-side-events
+typedef std::function<void(const uint8_t* pBuf, uint32_t bufLen)> RdWebSSEventsCB;
+
+class RdWebResponderSSEvents : public RdWebResponder
 {
 public:
-    RdWebResponderWS(RdWebHandler* pWebHandler, const RdWebRequestParams& params,
-            const String& reqStr, const RdWebServerSettings& webServerSettings,
-            RdWebSocketCanAcceptCB canAcceptMsgCB, RdWebSocketMsgCB sendMsgCB);
-    virtual ~RdWebResponderWS();
+    RdWebResponderSSEvents(RdWebHandler* pWebHandler, const RdWebRequestParams& params, 
+                const String& reqStr, RdWebSSEventsCB eventsCallback, 
+                const RdWebServerSettings& webServerSettings);
+    virtual ~RdWebResponderSSEvents();
 
     // Service - called frequently
     virtual void service() override final;
@@ -56,24 +56,14 @@ public:
         return false;
     }
 
-    // Send a frame of data
-    virtual bool sendFrame(const uint8_t* pBuf, uint32_t bufLen) override final;
+    // Send event content and group
+    virtual void sendEvent(const char* eventContent, const char* eventGroup);
 
     // Get responder type
     virtual const char* getResponderType() override final
     {
-        return "WS";
+        return "SSEvents";
     }
-
-    // Get protocolChannelID for responder
-    virtual bool getProtocolChannelID(uint32_t& protocolChannelID)
-    {
-        protocolChannelID = _reqParams.getProtocolChannelID();
-        return true;
-    }
-
-    // Ready for data
-    virtual bool readyForData() override final;
 
 private:
     // Handler
@@ -82,27 +72,17 @@ private:
     // Params
     RdWebRequestParams _reqParams;
 
-    // Websocket callback
-    RdWebSocketCB _webSocketCB;
-
-    // Websocket link
-    RdWebSocketLink _webSocketLink;
-
-    // Can accept message function
-    RdWebSocketCanAcceptCB _canAcceptMsgCB;
-
-    // Send message function
-    RdWebSocketMsgCB _sendMsgCB;
+    // Events callback
+    RdWebSSEventsCB _eventsCB;
 
     // Vars
     String _requestStr;
+    bool _isInitialResponse;
 
-    // Queue for sending frames over the web socket
-    static const uint32_t WEB_SOCKET_TX_QUEUE_SIZE = 10;
-    ThreadSafeQueue<RdWebDataFrame> _txQueue;
+    // Queue for sending frames over the event channel
+    static const uint32_t EVENT_TX_QUEUE_SIZE = 2;
+    ThreadSafeQueue<RdWebSSEvent> _txQueue;
 
-    // Callback on websocket activity
-    void webSocketCallback(RdWebSocketEventCode eventCode, const uint8_t* pBuf, uint32_t bufLen);
+    // Generate event message
+    String generateEventMessage(const char *pMsg, const char *pEvent, uint32_t id);
 };
-
-#endif

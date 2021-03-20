@@ -16,7 +16,6 @@
 #include <string.h>
 #include "lwip/api.h"
 #include <Utils.h>
-#include <NetworkSystem.h>
 #ifdef ESP8266
 #include "ESP8266Utils.h"
 #endif
@@ -437,7 +436,7 @@ void RdWebConnManager::serverSideEventsSendMsg(const char* eventContent, const c
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Send to all server-side events
+// Get websocket handler
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 RdWebHandler* RdWebConnManager::getWebSocketHandler()

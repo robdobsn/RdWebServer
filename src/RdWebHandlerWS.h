@@ -8,6 +8,8 @@
 
 #pragma once
 
+#ifndef ESP8266
+
 #include "RdWebHandler.h"
 #include <Logger.h>
 #include <RdWebRequestHeader.h>
@@ -99,3 +101,5 @@ private:
     // Web socket protocol channelIDs
     std::vector<uint32_t> _webSocketProtocolChannelIDs;
 };
+
+#endif

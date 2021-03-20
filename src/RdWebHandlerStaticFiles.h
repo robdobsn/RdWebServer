@@ -8,6 +8,8 @@
 
 #pragma once
 
+#ifndef ESP8266
+
 #include "RdWebHandler.h"
 #include <Logger.h>
 
@@ -17,7 +19,8 @@ class RdWebRequestHeader;
 class RdWebHandlerStaticFiles : public RdWebHandler
 {
 public:
-    RdWebHandlerStaticFiles(const char* pBaseURI, const char* pBaseFolder, const char* pCacheControl);
+    RdWebHandlerStaticFiles(const char* pBaseURI, const char* pBaseFolder, 
+            const char* pCacheControl, const char* pDefaultPath);
     virtual ~RdWebHandlerStaticFiles();
     virtual const char* getName() override;
     virtual RdWebResponder* getNewResponder(const RdWebRequestHeader& requestHeader, 
@@ -34,8 +37,8 @@ private:
     String _baseFolder;
     bool _isBaseReallyAFolder;
 
-    // Default file
-    String _defaultFileName;
+    // Default path (for response to /)
+    String _defaultPath;
 
     // Cache
     String _cacheControl;
@@ -47,6 +50,8 @@ private:
 
     // Helpers
     bool urlFileExists(const RdWebRequestHeader& header, String& filePath);
-    String getFilePath(const RdWebRequestHeader& header, bool defaultName);
+    String getFilePath(const RdWebRequestHeader& header, bool defaultPath);
 
 };
+
+#endif

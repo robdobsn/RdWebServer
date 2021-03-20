@@ -6,6 +6,8 @@
 //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#ifndef ESP8266
+
 #include "RdWebHandlerStaticFiles.h"
 #include "RdWebConnection.h"
 #include "RdWebResponder.h"
@@ -23,10 +25,12 @@ static const char* MODULE_PREFIX = "RdWebHStatFile";
 // Constructor
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-RdWebHandlerStaticFiles::RdWebHandlerStaticFiles(const char* pBaseURI, const char* pBaseFolder, const char* pCacheControl)
+RdWebHandlerStaticFiles::RdWebHandlerStaticFiles(const char* pBaseURI, 
+                const char* pBaseFolder, const char* pCacheControl,
+                const char* pDefaultPath)
 {
-    // Default file name
-    _defaultFileName = "index.html";
+    // Default path (for response to /)
+    _defaultPath = pDefaultPath;
 
     // Handle URI and base folder
     if (pBaseURI)
@@ -143,15 +147,17 @@ bool RdWebHandlerStaticFiles::urlFileExists(const RdWebRequestHeader& header, St
 // Get file path
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-String RdWebHandlerStaticFiles::getFilePath(const RdWebRequestHeader& header, bool defaultName)
+String RdWebHandlerStaticFiles::getFilePath(const RdWebRequestHeader& header, bool defaultPath)
 {
     // Remove the base path from the URL
     String filePath;
-    if (!defaultName)
+    if (!defaultPath)
         filePath = header.URL.substring(_baseURI.length());
     else
-        filePath = "/" + _defaultFileName;
+        filePath = "/" + _defaultPath;
 
     // Add on the file path
     return _baseFolder + filePath;
 }
+
+#endif

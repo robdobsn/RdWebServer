@@ -6,12 +6,15 @@
 //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#ifndef ESP8266
+
 #include "RdWebResponderFile.h"
-#include <Logger.h>
+#include "Logger.h"
+#include "FileSystemChunker.h"
 
 static const char *MODULE_PREFIX = "RdWebRespFile";
 
-// #define DEBUG_RESPONDER_FILE 1
+// #define DEBUG_RESPONDER_FILE
 // #define DEBUG_RESPONDER_FILE_CONTENTS
 // #define DEBUG_RESPONDER_FILE_START_END
 
@@ -25,6 +28,7 @@ RdWebResponderFile::RdWebResponderFile(const String& filePath, RdWebHandler* pWe
 {
     _filePath = filePath;
     _pWebHandler = pWebHandler;
+    _pChunker = new FileSystemChunker();
 }
 
 RdWebResponderFile::~RdWebResponderFile()
@@ -49,9 +53,11 @@ bool RdWebResponderFile::handleData(const uint8_t* pBuf, uint32_t dataLen)
 
 bool RdWebResponderFile::startResponding(RdWebConnection& request)
 {
-    _isActive = _chunker.start(_filePath, _reqParams.getMaxSendSize(), false);
+    if (!_pChunker)
+        return false;
+    _isActive = _pChunker->start(_filePath, _reqParams.getMaxSendSize(), false);
 #ifdef DEBUG_RESPONDER_FILE_START_END
-    LOG_I(MODULE_PREFIX, "startResponding");
+    LOG_I(MODULE_PREFIX, "startResponding isActive %d", _isActive);
 #endif
     return _isActive;
 }
@@ -62,9 +68,11 @@ bool RdWebResponderFile::startResponding(RdWebConnection& request)
 
 uint32_t RdWebResponderFile::getResponseNext(uint8_t* pBuf, uint32_t bufMaxLen)
 {
+    if (!_pChunker)
+        return 0;
     uint32_t readLen = 0;
     bool finalChunk = false;
-    if (!_chunker.next(pBuf, bufMaxLen, readLen, finalChunk))
+    if (!_pChunker->next(pBuf, bufMaxLen, readLen, finalChunk))
     {
         _isActive = false;
         LOG_W(MODULE_PREFIX, "getResponseNext failed");
@@ -136,7 +144,9 @@ const char* RdWebResponderFile::getContentType()
 
 int RdWebResponderFile::getContentLength()
 {
-    return _chunker.getFileLen();
+    if (!_pChunker)
+        return 0;
+    return _pChunker->getFileLen();
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -148,3 +158,4 @@ bool RdWebResponderFile::leaveConnOpen()
     return false;
 }
 
+#endif

@@ -6,6 +6,8 @@
 //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#ifndef ESP8266
+
 #include "RdWebResponderWS.h"
 #include <RdWebConnection.h>
 #include "RdWebServerSettings.h"
@@ -193,6 +195,9 @@ bool RdWebResponderWS::sendFrame(const uint8_t* pBuf, uint32_t bufLen)
 
 void RdWebResponderWS::webSocketCallback(RdWebSocketEventCode eventCode, const uint8_t* pBuf, uint32_t bufLen)
 {
+#ifdef DEBUG_WEBSOCKETS
+	const static char* MODULE_PREFIX = "wsCB";
+#endif
 	switch(eventCode) 
     {
 		case WEBSOCKET_EVENT_CONNECT:
@@ -266,3 +271,5 @@ void RdWebResponderWS::webSocketCallback(RdWebSocketEventCode eventCode, const u
         }
 	}
 }
+
+#endif

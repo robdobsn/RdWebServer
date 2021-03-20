@@ -169,7 +169,7 @@ bool RdWebMultipart::processHeaderByte(const uint8_t *buffer, uint32_t bufPos, u
     {
         if (_boundaryIdx == _boundaryStr.length() - 2)
         {
-            if (curByte != CR)
+            if (curByte != ASCII_CODE_CR)
             {
 #ifdef WARN_ON_MULTIPART_ERRORS
                 LOG_W(MODULE_PREFIX, "No CR after boundary pos %d ch %02x boundary %s boundaryLen %d",
@@ -182,7 +182,7 @@ bool RdWebMultipart::processHeaderByte(const uint8_t *buffer, uint32_t bufPos, u
         }
         else if (_boundaryIdx - 1 == _boundaryStr.length() - 2)
         {
-            if (curByte != LF)
+            if (curByte != ASCII_CODE_LF)
             {
 #ifdef WARN_ON_MULTIPART_ERRORS
                 LOG_W(MODULE_PREFIX, "No LF after CR bufPos %d", bufPos);
@@ -213,19 +213,19 @@ bool RdWebMultipart::processHeaderByte(const uint8_t *buffer, uint32_t bufPos, u
     }
     case RDMULTIPART_HEADER_FIELD:
     {
-        if (curByte == CR)
+        if (curByte == ASCII_CODE_CR)
         {
             _headerFieldStartPos = INVALID_POS;
             _parseState = RDMULTIPART_HEADERS_AWAIT_FINAL_LF;
             break;
         }
 
-        if (curByte == HYPHEN)
+        if (curByte == ASCII_CODE_HYPHEN)
         {
             break;
         }
 
-        if (curByte == COLON)
+        if (curByte == ASCII_CODE_COLON)
         {
             if ((_headerFieldStartPos != INVALID_POS) && (_headerFieldStartPos < bufPos))
             {
@@ -254,7 +254,7 @@ bool RdWebMultipart::processHeaderByte(const uint8_t *buffer, uint32_t bufPos, u
     case RDMULTIPART_HEADER_VALUE_START:
     {
         // Skip whitespace
-        if (curByte == SPACE)
+        if (curByte == ASCII_CODE_SPACE)
         {
             break;
         }
@@ -265,7 +265,7 @@ bool RdWebMultipart::processHeaderByte(const uint8_t *buffer, uint32_t bufPos, u
     }
     case RDMULTIPART_HEADER_VALUE:
     {
-        if (curByte == CR)
+        if (curByte == ASCII_CODE_CR)
         {
             if ((_headerValueStartPos != INVALID_POS) && (_headerValueStartPos < bufPos))
                 headerValueFound(buffer, _headerValueStartPos, bufPos - _headerValueStartPos);
@@ -275,7 +275,7 @@ bool RdWebMultipart::processHeaderByte(const uint8_t *buffer, uint32_t bufPos, u
     }
     case RDMULTIPART_HEADER_VALUE_GOT:
     {
-        if (curByte != LF)
+        if (curByte != ASCII_CODE_LF)
         {
 #ifdef WARN_ON_MULTIPART_ERRORS
             LOG_W(MODULE_PREFIX, "Header val LF expected after CR");
@@ -288,7 +288,7 @@ bool RdWebMultipart::processHeaderByte(const uint8_t *buffer, uint32_t bufPos, u
     }
     case RDMULTIPART_HEADERS_AWAIT_FINAL_LF:
     {
-        if (curByte != LF)
+        if (curByte != ASCII_CODE_LF)
         {
 #ifdef WARN_ON_MULTIPART_ERRORS
             LOG_W(MODULE_PREFIX, "Header end LF expected after CR");
@@ -344,7 +344,7 @@ bool RdWebMultipart::processPayload(const uint8_t *buffer, uint32_t bufPos, uint
             // Check if we are beyond the boundary - looking for indication of part-end
             if (((_boundaryIdx == _boundaryStr.length()) || 
                         (_boundaryIdx == _boundaryStr.length() + 1)) 
-                 && (curByte == HYPHEN))
+                 && (curByte == ASCII_CODE_HYPHEN))
             {
 #ifdef DEBUG_MULTIPART_BOUNDARY
                 LOG_W(MODULE_PREFIX, "Boundary hyphen bufPos %d boundaryIdx %d boundaryStrLen %d", 
@@ -358,7 +358,7 @@ bool RdWebMultipart::processPayload(const uint8_t *buffer, uint32_t bufPos, uint
             // Check for CR after the boundary
             else if (((_boundaryIdx == _boundaryStr.length()) ||
                         (_isFinalPart && (_boundaryIdx == _boundaryStr.length() + 2)))
-                && (curByte == CR))
+                && (curByte == ASCII_CODE_CR))
             {
 #ifdef DEBUG_MULTIPART_BOUNDARY
                 LOG_W(MODULE_PREFIX, "Boundary CR %d %d", bufPos, _boundaryIdx);
@@ -369,7 +369,7 @@ bool RdWebMultipart::processPayload(const uint8_t *buffer, uint32_t bufPos, uint
             // Check for LF after the CR after the boundary
             else if (((_boundaryIdx == _boundaryStr.length() + 1) ||
                         (_isFinalPart && (_boundaryIdx == _boundaryStr.length() + 3)))
-                && (curByte == LF))
+                && (curByte == ASCII_CODE_LF))
             {
                 // We have a complete boundary
 #ifdef DEBUG_MULTIPART_BOUNDARY
@@ -563,12 +563,12 @@ uint8_t RdWebMultipart::lower(uint8_t c) const
 
 inline bool RdWebMultipart::isBoundaryChar(uint8_t c) const
 {
-    return _boundaryCharMap[(unsigned uint8_t)c];
+    return _boundaryCharMap[c];
 }
 
 bool RdWebMultipart::isHeaderFieldCharacter(uint8_t c) const
 {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == HYPHEN;
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == ASCII_CODE_HYPHEN;
 }
 
 void RdWebMultipart::clearCallbacks()

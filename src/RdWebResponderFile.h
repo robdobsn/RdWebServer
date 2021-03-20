@@ -8,11 +8,13 @@
 
 #pragma once
 
+#ifndef ESP8266
+
 #include <WString.h>
 #include "RdWebResponder.h"
-#include "FileSystemChunker.h"
 #include "RdWebRequestParams.h"
 
+class FileSystemChunker;
 class RdWebHandler;
 
 class RdWebResponderFile : public RdWebResponder
@@ -54,7 +56,9 @@ public:
 private:
     String _filePath;
     RdWebHandler* _pWebHandler;
-    FileSystemChunker _chunker;
+    FileSystemChunker* _pChunker;
     RdWebRequestParams _reqParams;
     uint32_t _fileLength;
 };
+
+#endif

@@ -14,6 +14,8 @@
 #include <RdWebRequestHeader.h>
 #include <RdWebResponderRestAPI.h>
 
+// #define DEBUG_WEB_HANDLER_REST_API
+
 class RdWebRequest;
 
 class RdWebHandlerRestAPI : public RdWebHandler
@@ -23,6 +25,8 @@ public:
     {
         _pEndpointManager = pEndpointManager;
         _restAPIPrefix = restAPIPrefix;
+        if (!_restAPIPrefix.startsWith("/"))
+            _restAPIPrefix = "/" + _restAPIPrefix;
     }
     virtual ~RdWebHandlerRestAPI()
     {
@@ -35,25 +39,42 @@ public:
             const RdWebRequestParams& params, const RdWebServerSettings& webServerSettings) override final
     {
         if (!_pEndpointManager)
+        {
+#ifdef DEBUG_WEB_HANDLER_REST_API
+            LOG_W("WebHandlerRestAPI", "getNewResponder no EndpointManager %s", requestHeader.URL.c_str());
+#endif
             return NULL;
-        
+        }
+
         // Check for API prefix
-        if (!requestHeader.URL.startsWith("/" + _restAPIPrefix))
+        if (!requestHeader.URL.startsWith(_restAPIPrefix))
+        {
+#ifdef DEBUG_WEB_HANDLER_REST_API
+            LOG_W("WebHandlerRestAPI", "getNewResponder no match with %s for %s", 
+                        _restAPIPrefix.c_str(), requestHeader.URL.c_str());
+#endif
             return NULL;
+        }
 
         // Remove prefix on test string
-        String reqStr = requestHeader.URL.substring(_restAPIPrefix.length()+1);
+        String reqStr = requestHeader.URL.substring(_restAPIPrefix.length());
         RestAPIEndpointDef* pEndpointDef = 
                 _pEndpointManager->getMatchingEndpointDef(reqStr.c_str(), 
                                 convToRESTAPIMethod(requestHeader.extract.method));
         if (!pEndpointDef)
+        {
+#ifdef DEBUG_WEB_HANDLER_REST_API
+            LOG_W("WebHandlerRestAPI", "getNewResponder no matching endpoint found %s", requestHeader.URL.c_str());
+#endif
             return NULL;
-
+        }
         // Looks like we can handle this so create a new responder object
         RdWebResponder* pResponder = new RdWebResponderRestAPI(pEndpointDef, this, params, reqStr, requestHeader.extract);
 
         // Debug
-        // LOG_W("WebHandlerRestAPI", "getNewResponder constructed new responder %lx uri %s", (unsigned long)pResponder, requestHeader.URL.c_str());
+#ifdef DEBUG_WEB_HANDLER_REST_API
+        LOG_I("WebHandlerRestAPI", "getNewResponder constructed new responder %lx uri %s", (unsigned long)pResponder, requestHeader.URL.c_str());
+#endif
 
         // Return new responder - caller must clean up by deleting object when no longer needed
         return pResponder;

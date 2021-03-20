@@ -6,6 +6,8 @@
 //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#ifndef ESP8266
+
 #include "RdWebSocketLink.h"
 #include <stdint.h>
 #include <vector>
@@ -542,3 +544,5 @@ void RdWebSocketLink::unmaskData()
         }
     }
 }
+
+#endif

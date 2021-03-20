@@ -93,11 +93,11 @@ public:
     }
 
 private:
-    static const uint8_t CR = 13;
-    static const uint8_t LF = 10;
-    static const uint8_t SPACE = 32;
-    static const uint8_t HYPHEN = 45;
-    static const uint8_t COLON = 58;
+    static const uint8_t ASCII_CODE_CR = 13;
+    static const uint8_t ASCII_CODE_LF = 10;
+    static const uint8_t ASCII_CODE_SPACE = 32;
+    static const uint8_t ASCII_CODE_HYPHEN = 45;
+    static const uint8_t ASCII_CODE_COLON = 58;
     static const uint32_t INVALID_POS = UINT32_MAX;
 
     enum State

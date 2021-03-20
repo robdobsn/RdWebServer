@@ -20,7 +20,6 @@
 #ifndef ESP8266
 #include "tcpip_adapter.h"
 #endif
-#include <NetworkSystem.h>
 
 static const char *MODULE_PREFIX = "RdWebServer";
 

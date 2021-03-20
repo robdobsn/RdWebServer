@@ -113,7 +113,13 @@ uint32_t RdWebResponderRestAPI::getResponseNext(uint8_t* pBuf, uint32_t bufMaxLe
 {
     // Check if all data received
     if (_numBytesReceived != _headerExtract.contentLength)
+    {
+#ifdef DEBUG_RESPONDER_REST_API
+        LOG_I(MODULE_PREFIX, "getResponseNext not all data rx numRx %d contentLen %d", 
+                    _numBytesReceived, _headerExtract.contentLength);
+#endif
         return 0;
+    }
 
 #ifdef DEBUG_RESPONDER_REST_API
     LOG_I(MODULE_PREFIX, "getResponseNext maxRespLen %d endpointCalled %d isActive %d", 
