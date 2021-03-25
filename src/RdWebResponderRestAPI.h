@@ -15,13 +15,12 @@
 #include <Logger.h>
 #include "RdWebMultipart.h"
 
-class RestAPIEndpointDef;
 class RdWebHandler;
 
 class RdWebResponderRestAPI : public RdWebResponder
 {
 public:
-    RdWebResponderRestAPI(RestAPIEndpointDef* pEndpointDef, RdWebHandler* pWebHandler, 
+    RdWebResponderRestAPI(const RdWebServerRestEndpoint& endpoint, RdWebHandler* pWebHandler, 
                         const RdWebRequestParams& params, String& reqStr, const RdWebRequestHeaderExtract& headerExtract);
     virtual ~RdWebResponderRestAPI();
 
@@ -54,7 +53,7 @@ public:
 
 private:
     // Endpoint
-    RestAPIEndpointDef* _pEndpointDef;
+    RdWebServerRestEndpoint _endpoint;
 
     // Handler
     RdWebHandler* _pWebHandler;

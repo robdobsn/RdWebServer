@@ -8,11 +8,11 @@
 
 #pragma once
 
-#include "RdWebHandler.h"
 #include <Logger.h>
-#include <RestAPIEndpointManager.h>
-#include <RdWebRequestHeader.h>
-#include <RdWebResponderRestAPI.h>
+#include "RdWebHandler.h"
+#include "RdWebInterface.h"
+#include "RdWebRequestHeader.h"
+#include "RdWebResponderRestAPI.h"
 
 // #define DEBUG_WEB_HANDLER_REST_API
 
@@ -21,9 +21,9 @@ class RdWebRequest;
 class RdWebHandlerRestAPI : public RdWebHandler
 {
 public:
-    RdWebHandlerRestAPI(RestAPIEndpointManager* pEndpointManager, const String& restAPIPrefix)
+    RdWebHandlerRestAPI(const String& restAPIPrefix, RdWebAPIMatchEndpointCB matchEndpointCB)
     {
-        _pEndpointManager = pEndpointManager;
+        _matchEndpointCB = matchEndpointCB;
         _restAPIPrefix = restAPIPrefix;
         if (!_restAPIPrefix.startsWith("/"))
             _restAPIPrefix = "/" + _restAPIPrefix;
@@ -38,13 +38,9 @@ public:
     virtual RdWebResponder* getNewResponder(const RdWebRequestHeader& requestHeader, 
             const RdWebRequestParams& params, const RdWebServerSettings& webServerSettings) override final
     {
-        if (!_pEndpointManager)
-        {
-#ifdef DEBUG_WEB_HANDLER_REST_API
-            LOG_W("WebHandlerRestAPI", "getNewResponder no EndpointManager %s", requestHeader.URL.c_str());
-#endif
-            return NULL;
-        }
+        // Check
+        if (!_matchEndpointCB)
+            return nullptr;
 
         // Check for API prefix
         if (!requestHeader.URL.startsWith(_restAPIPrefix))
@@ -53,23 +49,21 @@ public:
             LOG_W("WebHandlerRestAPI", "getNewResponder no match with %s for %s", 
                         _restAPIPrefix.c_str(), requestHeader.URL.c_str());
 #endif
-            return NULL;
+            return nullptr;
         }
 
         // Remove prefix on test string
         String reqStr = requestHeader.URL.substring(_restAPIPrefix.length());
-        RestAPIEndpointDef* pEndpointDef = 
-                _pEndpointManager->getMatchingEndpointDef(reqStr.c_str(), 
-                                convToRESTAPIMethod(requestHeader.extract.method));
-        if (!pEndpointDef)
+        RdWebServerRestEndpoint endpoint;
+        if (!_matchEndpointCB(reqStr.c_str(), requestHeader.extract.method, endpoint))
         {
 #ifdef DEBUG_WEB_HANDLER_REST_API
             LOG_W("WebHandlerRestAPI", "getNewResponder no matching endpoint found %s", requestHeader.URL.c_str());
 #endif
-            return NULL;
+            return nullptr;
         }
         // Looks like we can handle this so create a new responder object
-        RdWebResponder* pResponder = new RdWebResponderRestAPI(pEndpointDef, this, params, reqStr, requestHeader.extract);
+        RdWebResponder* pResponder = new RdWebResponderRestAPI(endpoint, this, params, reqStr, requestHeader.extract);
 
         // Debug
 #ifdef DEBUG_WEB_HANDLER_REST_API
@@ -81,18 +75,6 @@ public:
     }
 
 private:
-    RestAPIEndpointManager* _pEndpointManager;
+    RdWebAPIMatchEndpointCB _matchEndpointCB;
     String _restAPIPrefix;
-
-    // Mapping from web-server method to RESTAPI method enums
-    RestAPIEndpointDef::EndpointMethod convToRESTAPIMethod(RdWebServerMethod method)
-    {
-        switch(method)
-        {
-            case WEB_METHOD_POST: return RestAPIEndpointDef::ENDPOINT_POST;
-            case WEB_METHOD_PUT: return RestAPIEndpointDef::ENDPOINT_PUT;
-            case WEB_METHOD_DELETE: return RestAPIEndpointDef::ENDPOINT_DELETE;
-            default: return RestAPIEndpointDef::ENDPOINT_GET;
-        }
-    }
 };

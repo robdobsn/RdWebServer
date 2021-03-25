@@ -58,7 +58,7 @@ public:
     // NOTE: this returns a new object or NULL
     // NOTE: if a new object is returned the caller is responsible for deleting it when appropriate
     RdWebResponder* getNewResponder(const RdWebRequestHeader& header, 
-                const RdWebRequestParams& params, HttpStatusCode& statusCode);
+                const RdWebRequestParams& params, RdHttpStatusCode& statusCode);
 
     // Get standard response headers
     std::list<RdJson::NameValuePair>* getStdResponseHeaders()

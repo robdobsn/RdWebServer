@@ -7,8 +7,8 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "RdWebResponderRestAPI.h"
-#include <RestAPIEndpointDef.h>
 #include <Logger.h>
+#include <FileBlockInfo.h>
 
 static const char *MODULE_PREFIX = "RdWebRespREST";
 
@@ -21,11 +21,11 @@ static const char *MODULE_PREFIX = "RdWebRespREST";
 // Constructor / Destructor
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-RdWebResponderRestAPI::RdWebResponderRestAPI(RestAPIEndpointDef* pEndpointDef, RdWebHandler* pWebHandler, 
+RdWebResponderRestAPI::RdWebResponderRestAPI(const RdWebServerRestEndpoint& endpoint, RdWebHandler* pWebHandler, 
                     const RdWebRequestParams& params, String& reqStr, const RdWebRequestHeaderExtract& headerExtract)
     : _reqParams(params)
 {
-    _pEndpointDef = pEndpointDef;
+    _endpoint = endpoint;
     _pWebHandler = pWebHandler;
     _endpointCalled = false;
     _requestStr = reqStr;
@@ -83,8 +83,8 @@ bool RdWebResponderRestAPI::handleData(const uint8_t* pBuf, uint32_t dataLen)
         LOG_I(MODULE_PREFIX, "handleData len %d", dataLen);
 #endif
         // Send as the body
-        if (_pEndpointDef)
-            _pEndpointDef->callbackBody(_requestStr, pBuf, dataLen, 0, dataLen);
+        if (_endpoint.restApiFnBody)
+            _endpoint.restApiFnBody(_requestStr, pBuf, dataLen, 0, dataLen);
     }
     return true;
 }
@@ -128,11 +128,12 @@ uint32_t RdWebResponderRestAPI::getResponseNext(uint8_t* pBuf, uint32_t bufMaxLe
 
     // Check if we need to call API
     uint32_t respLen = 0;
-    if (!_endpointCalled && _pEndpointDef)
+    if (!_endpointCalled)
     {
         // Call endpoint
         String retStr;
-        _pEndpointDef->callback(_requestStr, retStr);
+        if (_endpoint.restApiFn)
+            _endpoint.restApiFn(_requestStr, retStr);
 
         // Check how much of buffer to send
         respLen = bufMaxLen > retStr.length() ? retStr.length() : bufMaxLen;
@@ -231,8 +232,8 @@ void RdWebResponderRestAPI::multipartOnData(const uint8_t *pBuf, uint32_t bufLen
                     pBuf, bufLen, isFinalPart, formInfo._crc16, formInfo._crc16Valid,
                     formInfo._fileLenBytes, formInfo._fileLenValid);
     // Check for callback
-    if (_pEndpointDef)
-        _pEndpointDef->callbackUpload(_requestStr, fileBlockInfo);
+    if (_endpoint.restApiFnUpload)
+        _endpoint.restApiFnUpload(_requestStr, fileBlockInfo);
 }
 
 void RdWebResponderRestAPI::multipartOnHeaderNameValue(const String& name, const String& val)

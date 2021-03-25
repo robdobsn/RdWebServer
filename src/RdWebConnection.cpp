@@ -7,7 +7,7 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "RdWebConnection.h"
-#include "RdWebConnDefs.h"
+#include "RdWebInterface.h"
 #include "RdWebHandler.h"
 #include "RdWebConnManager.h"
 #include "RdWebResponder.h"
@@ -323,7 +323,7 @@ void RdWebConnection::service()
         if ((err != ERR_OK) || !pBuf)
         {
             LOG_W(MODULE_PREFIX, "service netconn_data err %s buf nullptr pConn %ld", 
-                        espIdfErrToStr(err), (unsigned long)_connClient);
+                        RdWebInterface::espIdfErrToStr(err), (unsigned long)_connClient);
             errorOccurred = true;
         }
         else
@@ -472,7 +472,7 @@ bool RdWebConnection::getRxData(struct netbuf** pInbuf, bool& closeRequired)
     {
 #ifdef WARN_WEB_CONN_ERROR_CLOSE
         LOG_W(MODULE_PREFIX, "getRxData netconn_recv error %s pConn %ld", 
-                    espIdfErrToStr(err), (unsigned long)_connClient);
+                    RdWebInterface::espIdfErrToStr(err), (unsigned long)_connClient);
 #endif
         closeRequired = true;
         return false;
@@ -528,7 +528,7 @@ bool RdWebConnection::serviceConnHeader(const uint8_t* pRxData, uint32_t dataLen
     // Debug
 #ifdef DEBUG_WEB_REQUEST_HEADERS
     LOG_I(MODULE_PREFIX, "onRxData headersOK method %s fullURI %s contentType %s contentLength %d host %s isContinue %d isMutilpart %d multipartBoundary %s", 
-            getHTTPMethodStr(_header.extract.method), _header.URIAndParams.c_str(),
+            RdWebInterface::getHTTPMethodStr(_header.extract.method), _header.URIAndParams.c_str(),
             _header.extract.contentType.c_str(), _header.extract.contentLength, _header.extract.host.c_str(), 
             _header.isContinue, _header.extract.isMultipart, _header.extract.multipartBoundary.c_str());
     LOG_I(MODULE_PREFIX, "onRxData headerExt auth %s isComplete %d isDigest %d reqConnType %d wsKey %s wsVers %s", 
@@ -537,7 +537,7 @@ bool RdWebConnection::serviceConnHeader(const uint8_t* pRxData, uint32_t dataLen
 #endif
 
     // Now find a responder
-    HttpStatusCode statusCode = HTTP_STATUS_NOTFOUND;
+    RdHttpStatusCode statusCode = HTTP_STATUS_NOTFOUND;
     // Delete any existing responder - there shouldn't be one
     if (_pResponder)
     {
@@ -707,7 +707,7 @@ bool RdWebConnection::parseHeaderLine(const String& line)
         // Debug
 #ifdef DEBUG_WEB_REQUEST_HEADERS
         LOG_I(MODULE_PREFIX, "parseHeaderLine method %s URL %s params %s fullURI %s", 
-                    getHTTPMethodStr(_header.extract.method), _header.URL.c_str(), _header.params.c_str(),
+                    RdWebInterface::getHTTPMethodStr(_header.extract.method), _header.URL.c_str(), _header.params.c_str(),
                     _header.URIAndParams.c_str());
 #endif
 
@@ -907,7 +907,7 @@ String RdWebConnection::decodeURL(const String &inURL) const
 // Set HTTP response status
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void RdWebConnection::setHTTPResponseStatus(HttpStatusCode responseCode)
+void RdWebConnection::setHTTPResponseStatus(RdHttpStatusCode responseCode)
 {
 #ifdef DEBUG_WEB_REQUEST_RESP
     LOG_I(MODULE_PREFIX, "Setting response code %s (%d)", getHTTPStatusStr(responseCode), responseCode);
@@ -950,7 +950,7 @@ bool RdWebConnection::rawSendOnConn(const uint8_t* pBuf, uint32_t bufLen)
     if (err != ERR_OK)
     {
         LOG_W(MODULE_PREFIX, "rawSendOnConn write failed err %s (%d) pConn %ld", 
-                    espIdfErrToStr(err), err, (unsigned long)_connClient);
+                    RdWebInterface::espIdfErrToStr(err), err, (unsigned long)_connClient);
     }
 #ifdef DEBUG_WEB_CONNECTION_DATA_PACKETS_CONTENTS
     String debugStr;
@@ -980,7 +980,7 @@ void RdWebConnection::sendStandardHeaders()
     // Send the first line
     char respLine[100];
     snprintf(respLine, sizeof(respLine), "HTTP/1.1 %d %s\r\n", _httpResponseStatus, 
-                getHTTPStatusStr(_httpResponseStatus));
+                RdWebInterface::getHTTPStatusStr(_httpResponseStatus));
     rawSendOnConn((const uint8_t*)respLine, strlen(respLine));
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
     // Debug

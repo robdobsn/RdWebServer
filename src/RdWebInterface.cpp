@@ -6,10 +6,10 @@
 //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include "RdWebConnDefs.h"
+#include "RdWebInterface.h"
 
 // Web Methods
-const char* getHTTPMethodStr(RdWebServerMethod method)
+const char* RdWebInterface::getHTTPMethodStr(RdWebServerMethod method)
 {
     switch(method)
     {
@@ -26,7 +26,7 @@ const char* getHTTPMethodStr(RdWebServerMethod method)
 }
 
 // Get conn type string
-const char* getReqConnTypeStr(RequestedConnectionType reqConnType)
+const char* RdWebInterface::getReqConnTypeStr(RdWebReqConnectionType reqConnType)
 {
     switch(reqConnType)
     {
@@ -40,7 +40,7 @@ const char* getReqConnTypeStr(RequestedConnectionType reqConnType)
 }
 
 // ESP-IDF error codes
-const char* espIdfErrToStr(err_t err)
+const char* RdWebInterface::espIdfErrToStr(err_t err)
 {
     switch(err)
     {
@@ -66,7 +66,7 @@ const char* espIdfErrToStr(err_t err)
 }
 
 // HTTP status codes
-const char* getHTTPStatusStr(HttpStatusCode status)
+const char* RdWebInterface::getHTTPStatusStr(RdHttpStatusCode status)
 {
     switch(status)
     {

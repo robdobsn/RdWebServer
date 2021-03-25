@@ -11,7 +11,7 @@
 #include <vector>
 #include <WString.h>
 #include <RdJson.h>
-#include "RdWebConnDefs.h"
+#include "RdWebInterface.h"
 
 class RdWebRequestHeaderExtract
 {
@@ -109,7 +109,7 @@ public:
     bool isContinue;
 
     // Requested connection type
-    RequestedConnectionType reqConnType;
+    RdWebReqConnectionType reqConnType;
 
     // WebSocket info
     String webSocketKey;

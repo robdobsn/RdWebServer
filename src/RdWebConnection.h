@@ -118,7 +118,7 @@ private:
     bool _sendSpecificHeaders;
 
     // Response code if no responder available
-    HttpStatusCode _httpResponseStatus;
+    RdHttpStatusCode _httpResponseStatus;
 
     // Timeout timer
     static const uint32_t MAX_STD_CONN_DURATION_MS = 180000;
@@ -164,7 +164,7 @@ private:
     bool serviceResponse(const uint8_t* pRxData, uint32_t dataLen, uint32_t& curBufPos);
 
     // Set HTTP response status
-    void setHTTPResponseStatus(HttpStatusCode reponseCode);
+    void setHTTPResponseStatus(RdHttpStatusCode reponseCode);
 
     // Raw send on connection - used by websockets, etc
     bool rawSendOnConn(const uint8_t* pBuf, uint32_t bufLen);    

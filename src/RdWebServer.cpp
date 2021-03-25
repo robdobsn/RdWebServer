@@ -248,7 +248,7 @@ void RdWebServer::socketListenerTask(void* pvParameters)
             struct netconn* pNewConnection;
             err_t errCode = netconn_accept(pListener, &pNewConnection);
 #ifdef DEBUG_NEW_CONNECTION
-            LOG_I(MODULE_PREFIX, "new connection netconn %s", espIdfErrToStr(errCode));
+            LOG_I(MODULE_PREFIX, "new connection netconn %s", RdWebInterface::espIdfErrToStr(errCode));
 #endif
             if ((errCode == ERR_OK) && pNewConnection)
             {

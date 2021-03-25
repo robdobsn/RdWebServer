@@ -36,6 +36,7 @@ const static char* MODULE_PREFIX = "WebConnMgr";
 // #define DEBUG_WEB_SERVER_HANDLERS
 // #define DEBUG_WEBSOCKETS
 // #define DEBUG_WEBSOCKETS_SEND_DETAIL
+// #define DEBUG_NEW_RESPONDER
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Constructor
@@ -257,7 +258,7 @@ bool RdWebConnManager::addHandler(RdWebHandler* pHandler)
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 RdWebResponder* RdWebConnManager::getNewResponder(const RdWebRequestHeader& header, 
-		const RdWebRequestParams& params, HttpStatusCode& statusCode)
+		const RdWebRequestParams& params, RdHttpStatusCode& statusCode)
 {
 	// Check limit on websockets
 	RdWebRequestParams reqParams = params;
@@ -283,6 +284,14 @@ RdWebResponder* RdWebConnManager::getNewResponder(const RdWebRequestHeader& head
 			// Get a responder
 			RdWebResponder* pResponder = pHandler->getNewResponder(header, reqParams, 
 						_webServerSettings);
+
+#ifdef DEBUG_NEW_RESPONDER
+			LOG_I(MODULE_PREFIX, "getNewResponder url %s handlerType %s result %s",
+					header.URL.c_str(), pHandler->getName(), 
+					pResponder ? "OK" : "NoMatch");
+#endif
+
+			// Return responder if there is one
 			if (pResponder)
 				return pResponder;
 		}
