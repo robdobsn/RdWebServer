@@ -53,7 +53,7 @@ public:
         }
 
         // Remove prefix on test string
-        String reqStr = requestHeader.URL.substring(_restAPIPrefix.length());
+        String reqStr = requestHeader.URIAndParams.substring(_restAPIPrefix.length());
         RdWebServerRestEndpoint endpoint;
         if (!_matchEndpointCB(reqStr.c_str(), requestHeader.extract.method, endpoint))
         {
