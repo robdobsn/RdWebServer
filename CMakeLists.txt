@@ -1,8 +1,8 @@
 idf_component_register(
                 SRCS 
+                  "src/RdWebInterface.cpp"
                   "src/RdWebServer.cpp"
                   "src/RdWebConnManager.cpp"
-                  "src/RdWebConnDefs.cpp"
                   "src/RdWebHandlerStaticFiles.cpp"
                   "src/RdWebConnection.cpp"
                   "src/RdWebResponderFile.cpp"
@@ -13,5 +13,6 @@ idf_component_register(
                 INCLUDE_DIRS
                   "src"
                 REQUIRES
+                  core
                 )
 
