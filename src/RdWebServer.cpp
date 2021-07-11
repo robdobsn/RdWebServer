@@ -13,11 +13,6 @@
 #include <stdint.h>
 #include <string.h>
 #ifndef ESP8266
-#include "lwip/api.h"
-#include "lwip/sockets.h"
-#endif
-#include <Utils.h>
-#ifndef ESP8266
 #include "tcpip_adapter.h"
 #endif
 
@@ -134,147 +129,9 @@ void RdWebServer::socketListenerTask(void* pvParameters)
 	// Get pointer to specific RdWebServer object
 	RdWebServer* pWS = (RdWebServer*)pvParameters;
 
-    // Loop forever
-    while (1)
-    {
-#ifdef WEB_CONN_USE_BERKELEY_SOCKETS
-        // Create socket
-        int socketId = socket(AF_INET , SOCK_STREAM , 0);
-        if (socketId < 0)
-        {
-            LOG_W(MODULE_PREFIX, "socketListenerTask failed to create socket");
-            vTaskDelay(WEB_SERVER_SOCKET_RETRY_DELAY_MS / portTICK_PERIOD_MS);
-            continue;
-        }
-
-        // Form address to be used in bind call - IPV4 assumed
-        struct sockaddr_in bindAddr;
-        memset(&bindAddr, 0, sizeof(bindAddr));
-        bindAddr.sin_addr.s_addr = INADDR_ANY;
-        bindAddr.sin_family = AF_INET;
-        bindAddr.sin_port = htons(pWS->_webServerSettings._serverTCPPort);
-
-        // Bind to IP and port
-        int bind_err = bind(socketId, (struct sockaddr *)&bindAddr, sizeof(bindAddr));
-        if (bind_err != 0)
-        {
-            LOG_W(MODULE_PREFIX, "socketListenerTask failed to bind on port %d errno %d",
-                                pWS->_webServerSettings._serverTCPPort, errno);
-            shutdown(socketId, 0);
-            close(socketId);
-            vTaskDelay(WEB_SERVER_SOCKET_RETRY_DELAY_MS / portTICK_PERIOD_MS);
-            continue;
-        }
-
-        // Listen for clients
-        int listen_error = listen(socketId, pWS->_webServerSettings._numConnSlots);
-        if (listen_error != 0)
-        {
-            LOG_W(MODULE_PREFIX, "socketListenerTask failed to listen errno %d", errno);
-            shutdown(socketId, 0);
-            close(socketId);
-            vTaskDelay(WEB_SERVER_SOCKET_RETRY_DELAY_MS / portTICK_PERIOD_MS);
-            continue;
-        }
-        LOG_I(MODULE_PREFIX, "socketListenerTask listening");
-
-        // Wait for connection
-        while (true)
-        {
-            // Client info
-            struct sockaddr_storage clientInfo;
-            socklen_t clientInfoLen = sizeof(clientInfo);
-            int sockClient = accept(socketId, (struct sockaddr *)&clientInfoLen, &clientInfoLen);
-            if(sockClient < 0)
-            {
-                LOG_W(MODULE_PREFIX, "socketListenerTask failed to accept %d", errno);
-                bool socketReconnNeeded = false;
-                switch(errno)
-                {
-                    case ENETDOWN:
-                    case EPROTO:
-                    case ENOPROTOOPT:
-                    case EHOSTDOWN:
-                    case EHOSTUNREACH:
-                    case EOPNOTSUPP:
-                    case ENETUNREACH:
-                        vTaskDelay(WEB_SERVER_SOCKET_RETRY_DELAY_MS / portTICK_PERIOD_MS);
-                        break;
-                    case EWOULDBLOCK:
-                        break;
-                    default:
-                        socketReconnNeeded = true;
-                        break;
-                }
-                if (socketReconnNeeded)
-                    break;
-                continue;
-            }
-            else
-            {
-#ifdef DEBUG_NEW_CONNECTION
-                LOG_I(MODULE_PREFIX, "socketListenerTask newConn handle %d", sockClient);
-#endif
-                // Handle the connection - if this returns true then it is the 
-                // responsibility of the client to close the connection
-                if (!pWS->_connManager.handleNewConnection(sockClient))
-                {
-                    shutdown(sockClient, 0);
-                    close(sockClient);
-                }
-            }
-        }
-
-        // Listener exited
-        shutdown(socketId, 0);
-        close(socketId);
-        LOG_E(MODULE_PREFIX,"socketListenerTask socket closed");
-
-        // Delay hoping networking recovers
-        vTaskDelay(WEB_SERVER_SOCKET_RETRY_DELAY_MS / portTICK_PERIOD_MS);
-    }
-
-#else
-        // Create netconn and bind to port
-        struct netconn* pListener = netconn_new(NETCONN_TCP);
-        netconn_bind(pListener, NULL, pWS->_webServerSettings._serverTCPPort);
-        netconn_listen(pListener);
-        LOG_I(MODULE_PREFIX, "web server listening");
-
-        // Wait for connection
-        while (true) 
-        {
-            // Accept connection
-            struct netconn* pNewConnection;
-            err_t errCode = netconn_accept(pListener, &pNewConnection);
-#ifdef DEBUG_NEW_CONNECTION
-            LOG_I(MODULE_PREFIX, "new connection netconn %s", RdWebInterface::espIdfErrToStr(errCode));
-#endif
-            if ((errCode == ERR_OK) && pNewConnection)
-            {
-                // Handle the connection
-                if (!pWS->_connManager.handleNewConnection(pNewConnection))
-                {
-                    // No room so close and delete
-                    netconn_close(pNewConnection);
-                    netconn_delete(pNewConnection);
-                }
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        // Listener exited
-        netconn_close(pListener);
-        netconn_delete(pListener);
-        LOG_E(MODULE_PREFIX,"listener exited");
-
-        // Delay hoping networking recovers
-        delay(5000);
-    }
-#endif
+    // Listen for client connections
+    pWS->_connManager.listenForClients(pWS->_webServerSettings._serverTCPPort, 
+                    pWS->_webServerSettings._numConnSlots);
 }
 #endif
 

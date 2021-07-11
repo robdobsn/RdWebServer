@@ -52,7 +52,6 @@ public:
 
 private:
 
-    static const uint32_t WEB_SERVER_SOCKET_RETRY_DELAY_MS = 1000;
 #ifndef ESP8266
     // Helpers
     static void socketListenerTask(void* pvParameters);

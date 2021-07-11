@@ -50,7 +50,7 @@ RdWebConnection::RdWebConnection()
 {
     // Responder
     _pResponder = nullptr;
-    _connClient = WEB_CONN_CLIENT_INVALID_VALUE;
+    _pClientConn = nullptr;
     
     // Clear
     clear();
@@ -66,64 +66,57 @@ RdWebConnection::~RdWebConnection()
     if (_pResponder)
     {
 #ifdef DEBUG_RESPONDER_CREATE_DELETE
-        LOG_W(MODULE_PREFIX, "destructor deleting _pResponder %lx", (unsigned long)_pResponder);
+        LOG_W(MODULE_PREFIX, "destructor deleting _pResponder %d", (uint32_t)_pResponder);
 #endif
         delete _pResponder;
     }
 
-#ifdef ESP8266
-    if (_connClient)
+    // Check if there is a client to clean up
+    if (_pClientConn)
     {
-        _connClient->stop();
-        delete _connClient;
-    }
+#ifdef DEBUG_RESPONDER_CREATE_DELETE
+        LOG_W(MODULE_PREFIX, "destructor deleting _pClientConn %d", _pClientConn->getClientId());
 #endif
+        delete _pClientConn;
+    }
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Set new connection
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void RdWebConnection::setNewConn(RdWebConnClientType& connClient, RdWebConnManager* pConnManager,
+bool RdWebConnection::setNewConn(RdClientConnBase* pClientConn, RdWebConnManager* pConnManager,
                 uint32_t maxSendBufferBytes)
 {
-    // Error check
-    if (_connClient != WEB_CONN_CLIENT_INVALID_VALUE)
+    // Error check - there should not be a current client otherwise there's been a mistake!
+    if (_pClientConn != nullptr)
     {
         // Caller should only use this method if connection is inactive
-        LOG_E(MODULE_PREFIX, "setNewConn existing connection active %ld", (unsigned long)_connClient);
-        return;
+        LOG_E(MODULE_PREFIX, "setNewConn existing connection active %d", _pClientConn->getClientId());
+        return false;
     }
 
     // Clear first
     clear();
 
     // New connection
-    _connClient = connClient;
+    _pClientConn = pClientConn;
     _pConnManager = pConnManager;
     _timeoutStartMs = millis();
     _timeoutActive = true;
     _timeoutDurationMs = MAX_STD_CONN_DURATION_MS;
     _maxSendBufferBytes = maxSendBufferBytes;
 
-#ifndef ESP8266
-#ifdef WEB_CONN_USE_BERKELEY_SOCKETS
-    // Set non-blocking socket
-    int flags = fcntl(_connClient, F_GETFL, 0);
-    if (flags != -1)
-       flags = flags | O_NONBLOCK;
-   fcntl(_connClient, F_SETFL, flags);
-#else
-    // Set connection timeout
-    netconn_set_recvtimeout(_connClient, 1);
-#endif
-#endif
+    // Set non-blocking connection
+    _pClientConn->setup(false);
 
     // Debug
 #ifdef DEBUG_WEB_CONN_OPEN_CLOSE
-    LOG_I(MODULE_PREFIX, "setNewConn conn %ld", (unsigned long)_connClient);
+    LOG_I(MODULE_PREFIX, "setNewConn connId %d", _pClientConn->getClientId());
 #endif
 
+    // Connection set
+    return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -136,21 +129,23 @@ void RdWebConnection::clear()
     if (_pResponder)
     {
 #ifdef DEBUG_RESPONDER_CREATE_DELETE
-        LOG_W(MODULE_PREFIX, "clear deleting _pResponder %lx", (unsigned long)_pResponder);
+        LOG_W(MODULE_PREFIX, "clear deleting _pResponder %d", (uint32_t)_pResponder);
 #endif
         delete _pResponder;
+        _pResponder = nullptr;
     }
 
-#ifdef ESP8266
-    if (_pConn)
+    // Delete any client
+#ifdef DEBUG_WEB_CONN_OPEN_CLOSE
+    if (_pClientConn)
     {
-        delete _connClient;
+        LOG_I(MODULE_PREFIX, "clear deleting clientConn %d", _pClientConn->getClientId());
     }
 #endif
+    delete _pClientConn;
+    _pClientConn = nullptr;
 
     // Clear all fields
-    _pResponder = nullptr;
-    _connClient = WEB_CONN_CLIENT_INVALID_VALUE;
     _pConnManager = nullptr;
     _isStdHeaderRequired = true;
     _sendSpecificHeaders = true;
@@ -164,35 +159,13 @@ void RdWebConnection::clear()
     _header.clear();
 }
 
-void RdWebConnection::closeAndClear()
-{
-#ifdef DEBUG_WEB_CONN_OPEN_CLOSE
-    LOG_I(MODULE_PREFIX, "closeAndClear closing conn %ld", (unsigned long)_connClient);
-#endif
-
-#ifndef ESP8266
-#ifdef WEB_CONN_USE_BERKELEY_SOCKETS
-    close(_connClient);
-#else
-    // Close connection
-    netconn_close(_connClient);
-    netconn_delete(_connClient);
-#endif
-#else
-    if (_connClient)
-        _connClient->stop();
-#endif
-    // Clear
-    clear();
-}
-
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Check Active
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 bool RdWebConnection::isActive()
 {
-    return _connClient != WEB_CONN_CLIENT_INVALID_VALUE;
+    return _pClientConn && _pClientConn->isActive();
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -202,8 +175,8 @@ bool RdWebConnection::isActive()
 bool RdWebConnection::sendOnWebSocket(const uint8_t* pBuf, uint32_t bufLen)
 {
 #ifdef DEBUG_WEB_SOCKET_SEND
-    LOG_I(MODULE_PREFIX, "sendOnWebSocket len %d responder %ld conn %ld", bufLen, (unsigned long)_pResponder, 
-                    (unsigned long)_connClient);
+    LOG_I(MODULE_PREFIX, "sendOnWebSocket len %d responder %d connId %d", bufLen, (uint32_t)_pResponder, 
+                    _pClientConn ? _pClientConn->getClientId() : 0);
 #endif
 
     // Send to responder
@@ -215,16 +188,16 @@ bool RdWebConnection::sendOnWebSocket(const uint8_t* pBuf, uint32_t bufLen)
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Send on websocket
+// Send server-side-event
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void RdWebConnection::sendOnSSEvents(const char* eventContent, const char* eventGroup)
 {
 #ifdef DEBUG_WEB_SSEVENT_SEND
-    LOG_I(MODULE_PREFIX, "sendOnSSEvents eventGroup %s eventContent %s responder %lx pConn %lx", 
+    LOG_I(MODULE_PREFIX, "sendOnSSEvents eventGroup %s eventContent %s responder %d connId %d", 
                 eventGroup, eventContent,
-                (unsigned long)_pResponder, 
-                (unsigned long)_pConn);
+                (uint32_t)_pResponder, 
+                _pClientConn ? _pClientConn->getClientId() : 0);
 #endif
 
     // Send to responder
@@ -245,14 +218,14 @@ void RdWebConnection::service()
 #endif
 
     // Check active
-    if (_connClient == WEB_CONN_CLIENT_INVALID_VALUE)
+    if (!_pClientConn)
         return;
 
     // Check timout
     if (_timeoutActive && Utils::isTimeout(millis(), _timeoutStartMs, _timeoutDurationMs))
     {
-        LOG_W(MODULE_PREFIX, "service timeout on connection conn %ld", (unsigned long)_connClient);
-        closeAndClear();
+        LOG_W(MODULE_PREFIX, "service timeout on connection connId %d", _pClientConn->getClientId());
+        clear();
         return;
     }
 
@@ -260,235 +233,75 @@ void RdWebConnection::service()
     if (_pResponder)
         _pResponder->service();
 
-    // Check if ready for data
-    bool readyForData = (!_header.isComplete) || (_pResponder && _pResponder->readyForData());
-    if (!readyForData)
-        return;
-
-    // Get data
+    // Check for new data
+    uint32_t dataLen = 0;
     bool closeRequired = false;
-    bool errorOccurred = false;
+    uint8_t* pData = _pClientConn->getDataStart(dataLen, closeRequired);
+    bool dataAvailable = (pData != nullptr) && (dataLen != 0);
 
-#ifndef ESP8266
-#ifdef WEB_CONN_USE_BERKELEY_SOCKETS
-    uint8_t* pBuf = new uint8_t[WEB_CONN_MAX_RX_BUFFER];
-    if (!pBuf)
+    // Debug and stats
+    if (dataAvailable)
     {
-        LOG_E(MODULE_PREFIX, "service failed to alloc %ld", (unsigned long)_connClient);
-        return;
-    }
-    int32_t bufLen = recv(_connClient, pBuf, WEB_CONN_MAX_RX_BUFFER, 0);
-    if (bufLen < 0)
-    {
-        switch(errno)
-        {
-            case EWOULDBLOCK:
-                bufLen = 0;
-                break;
-            default:
-                LOG_W(MODULE_PREFIX, "service read error %d", errno);
-                errorOccurred = true;
-                break;
-        }
-    }
-    else if (bufLen == 0)
-    {
-        LOG_W(MODULE_PREFIX, "service read conn closed %d", errno);
-        closeRequired = true;
-    }
-    else
-    {
-        _debugDataRxCount += bufLen;
+        _debugDataRxCount += dataLen;
 #ifdef DEBUG_WEB_CONNECTION_DATA_PACKETS
-        LOG_W(MODULE_PREFIX, "service read len %d rxTotal %d", bufLen, _debugDataRxCount);
+        LOG_I(MODULE_PREFIX, "service got new data len %d rxTotal %d", dataLen, _debugDataRxCount);
 #endif
 #ifdef DEBUG_WEB_CONNECTION_DATA_PACKETS_CONTENTS
         String debugStr;
-        Utils::getHexStrFromBytes(pBuf, bufLen, debugStr);
-        LOG_I(MODULE_PREFIX, "RX: %s", debugStr.c_str());
+        Utils::getHexStrFromBytes(pData, dataLen, debugStr);
+        LOG_I(MODULE_PREFIX, "connId %d RX: %s", _pClientConn->getClientId(), debugStr.c_str());
 #endif
     }
-#else // WEB_CONN_USE_BERKELEY_SOCKETS
-    // Check for data
-    struct netbuf *inbuf = nullptr;
-    bool dataReady = getRxData(&inbuf, closeRequired);
-
-    // Get any found data
-    uint8_t *pBuf = nullptr;
-    uint16_t bufLen = 0;
-    if (dataReady && inbuf)
-    {
-        // Get a buffer
-        err_t err = netbuf_data(inbuf, (void **)&pBuf, &bufLen);
-        if ((err != ERR_OK) || !pBuf)
-        {
-            LOG_W(MODULE_PREFIX, "service netconn_data err %s buf nullptr pConn %ld", 
-                        RdWebInterface::espIdfErrToStr(err), (unsigned long)_connClient);
-            errorOccurred = true;
-        }
-        else
-        {
-            _debugDataRxCount += bufLen;
-#ifdef DEBUG_WEB_CONNECTION_DATA_PACKETS
-            LOG_W(MODULE_PREFIX, "service netconn_data len %d rxTotal %d", bufLen, _debugDataRxCount);
-#endif
-#ifdef DEBUG_WEB_CONNECTION_DATA_PACKETS_CONTENTS
-        String debugStr;
-        Utils::getHexStrFromBytes(pBuf, bufLen, debugStr);
-        LOG_I(MODULE_PREFIX, "RX: %s", debugStr.c_str());
-#endif
-        }
-    }
-#endif // WEB_CONN_USE_BERKELEY_SOCKETS 
-#else // ESP8266
-    // Check for data
-    static const uint32_t MAX_BYTES_TO_RX = 1000;
-    uint8_t dataBuf[MAX_BYTES_TO_RX];
-
-    if (_pConn)
-    {
-        if (_pConn->connected())
-        {
-            while (_pConn->available()) 
-            {
-                bufLen = _pConn->read(dataBuf, MAX_BYTES_TO_RX);
-            }
-        }
-        pBuf = dataBuf;
-    }
-
-    // Service responder
-    if (_pResponder)
-        _pResponder->service();
-
-#endif // ESP8266
 
     // See if we are forming the header
     uint32_t bufPos = 0;
-    if ((bufLen > 0) && !errorOccurred && !_header.isComplete)
+    bool errorOccurred = false;
+    if (dataAvailable && !_header.isComplete)
     {
-        if (!serviceConnHeader(pBuf, bufLen, bufPos))
+        if (!serviceConnHeader(pData, dataLen, bufPos))
         {
-            LOG_W(MODULE_PREFIX, "service connHeader error closing conn %ld", 
-                                        (unsigned long)_connClient);
+            LOG_W(MODULE_PREFIX, "service connHeader error closing connId %d", _pClientConn->getClientId());
             errorOccurred = true;
         }
     }
 
     // Service response - may remain in this state (e.g. for file-transfer / web-sockets)
-    if ((bufLen > 0) && !errorOccurred && _header.isComplete)
+    if (dataAvailable && _header.isComplete)
     {
-        if (!serviceResponse(pBuf, bufLen, bufPos))
+        if (!serviceResponse(pData, dataLen, bufPos))
         {
 #ifdef DEBUG_RESPONDER_PROGRESS
-            LOG_I(MODULE_PREFIX, "service no longer sending so close conn %ld", 
-                            (unsigned long)_connClient);
+            LOG_I(MODULE_PREFIX, "service no longer sending so close connId %d", _pClientConn->getClientId());
 #endif
             closeRequired = true;
         }
     }
 
+    // Data all handled
+    _pClientConn->getDataEnd();
+
     // Check for close
     if (errorOccurred || closeRequired)
     {
 #ifdef DEBUG_WEB_CONN_OPEN_CLOSE
-        LOG_I(MODULE_PREFIX, "service conn closing cause %s pConn %ld", 
+        LOG_I(MODULE_PREFIX, "service conn closing cause %s connId %d", 
                 errorOccurred ? "ErrorOccurred" : "CloseRequired", 
-                (unsigned long)_connClient);
+                _pClientConn->getClientId());
 #endif
-        closeAndClear();
+
+        // This closes any connection and clears status ready for a new one
+        clear();
+
 #ifdef DEBUG_TRACE_HEAP_USAGE_WEB_CONN
         heap_trace_stop();
         heap_trace_dump();
 #endif
     }
 
-#ifndef ESP8266
-#ifdef WEB_CONN_USE_BERKELEY_SOCKETS
-    // Delete buffer
-    if (pBuf)
-        delete pBuf;
-#else
-    // Data all handled
-    if (inbuf)
-        netbuf_delete(inbuf);
-#endif
-#endif
-
 #ifdef DEBUG_WEB_CONN_SERVICE_TIME
     LOG_I(MODULE_PREFIX, "service elapsed %ld", millis() - debugServiceStartMs);
 #endif
 }
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Get Rx data
-// True if data is available
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-#ifndef ESP8266
-#ifndef WEB_CONN_USE_BERKELEY_SOCKETS
-
-bool RdWebConnection::getRxData(struct netbuf** pInbuf, bool& closeRequired)
-{
-    closeRequired = false;
-    // Debug
-#ifdef DEBUG_WEB_REQUEST_READ_START_END
-    LOG_W(MODULE_PREFIX, "getRxData reading from client pConn %ld", 
-                (unsigned long)_connClient);
-#endif
-
-    // See if data available
-    err_t err = netconn_recv(_connClient, pInbuf);
-
-    // Check for timeout
-    if (err == ERR_TIMEOUT)
-    {
-        // Debug
-#ifdef DEBUG_WEB_REQUEST_READ_START_END
-        LOG_W(MODULE_PREFIX, "getRxData read nothing available pConn %ld", 
-                        (unsigned long)_connClient);
-#endif
-
-        // Nothing to do
-        return false;
-    }
-
-    // Check for closed
-    if (err == ERR_CLSD)
-    {
-        // Debug
-#ifdef DEBUG_WEB_REQUEST_READ_START_END
-        LOG_W(MODULE_PREFIX, "getRxData read connection closed pConn %ld", 
-                        (unsigned long)_connClient);
-#endif
-
-        // Link is closed
-        closeRequired = true;
-        return false;
-    }
-
-    // Check for other error
-    if (err != ERR_OK)
-    {
-#ifdef WARN_WEB_CONN_ERROR_CLOSE
-        LOG_W(MODULE_PREFIX, "getRxData netconn_recv error %s pConn %ld", 
-                    RdWebInterface::espIdfErrToStr(err), (unsigned long)_connClient);
-#endif
-        closeRequired = true;
-        return false;
-    }
-
-    // Debug
-#ifdef DEBUG_WEB_REQUEST_READ_START_END
-    LOG_W(MODULE_PREFIX, "getRxData has read from client OK pConn %ld", 
-                (unsigned long)_connClient);
-#endif
-
-    // Data available in pInbuf
-    return true;
-}
-#endif // WEB_CONN_USE_BERKELEY_SOCKETS
-#endif // ESP8266
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Service connection header
@@ -541,7 +354,7 @@ bool RdWebConnection::serviceConnHeader(const uint8_t* pRxData, uint32_t dataLen
     // Delete any existing responder - there shouldn't be one
     if (_pResponder)
     {
-        LOG_W(MODULE_PREFIX, "onRxData unexpectedly deleting _pResponder %ld", (unsigned long)_pResponder);
+        LOG_W(MODULE_PREFIX, "onRxData unexpectedly deleting _pResponder %d", (uint32_t)_pResponder);
         delete _pResponder;
         _pResponder = nullptr;
     }
@@ -551,9 +364,15 @@ bool RdWebConnection::serviceConnHeader(const uint8_t* pRxData, uint32_t dataLen
                 std::bind(&RdWebConnection::rawSendOnConn, this, std::placeholders::_1, std::placeholders::_2));
     _pResponder = _pConnManager->getNewResponder(_header, params, statusCode);
 #ifdef DEBUG_RESPONDER_CREATE_DELETE
-    if (_pResponder) {
-        LOG_I(MODULE_PREFIX, "New Responder created type %s", _pResponder->getResponderType());
-    } else {
+    if (_pResponder) 
+    {
+        uint32_t channelID = 0;
+        bool chanIdOk = _pResponder->getProtocolChannelID(channelID);
+        LOG_I(MODULE_PREFIX, "New Responder created type %s chanID %d%s responder %d", _pResponder->getResponderType(), 
+                            channelID, chanIdOk ? "" : " (INVALID)", (uint32_t)_pResponder);
+    } 
+    else 
+    {
         LOG_W(MODULE_PREFIX, "Failed to create responder URI %s HTTP resp %d", _header.URIAndParams.c_str(), statusCode);
     }
 #endif
@@ -595,21 +414,17 @@ bool RdWebConnection::serviceResponse(const uint8_t* pRxData, uint32_t dataLen, 
     if (_pResponder && _pResponder->isActive())
     {
         // Get next chunk of response
-#ifndef ESP8266
         if (_maxSendBufferBytes > MAX_BUFFER_ALLOCATED_ON_STACK)
         {
-#endif
             uint8_t* pSendBuffer = new uint8_t[_maxSendBufferBytes];
             handleResponseWithBuffer(pSendBuffer);
             delete [] pSendBuffer;
-#ifndef ESP8266
         }
         else
         {
             uint8_t pSendBuffer[_maxSendBufferBytes];
             handleResponseWithBuffer(pSendBuffer);
         }
-#endif
     }
 
     // Send the standard response and headers if required    
@@ -624,10 +439,10 @@ bool RdWebConnection::serviceResponse(const uint8_t* pRxData, uint32_t dataLen, 
 
     // Debug
 #ifdef DEBUG_RESPONDER_PROGRESS_DETAIL
-    LOG_I(MODULE_PREFIX, "serviceResponse atEnd responder %s isActive %s pConn %ld", 
+    LOG_I(MODULE_PREFIX, "serviceResponse atEnd responder %s isActive %s connId %d", 
                 _pResponder ? "YES" : "NO", 
                 (_pResponder && _pResponder->isActive()) ? "YES" : "NO", 
-                (unsigned long)_connClient);
+                _pClientConn->getClientId());
 #endif
 
     // If no responder then that's it
@@ -910,7 +725,7 @@ String RdWebConnection::decodeURL(const String &inURL) const
 void RdWebConnection::setHTTPResponseStatus(RdHttpStatusCode responseCode)
 {
 #ifdef DEBUG_WEB_REQUEST_RESP
-    LOG_I(MODULE_PREFIX, "Setting response code %s (%d)", getHTTPStatusStr(responseCode), responseCode);
+    LOG_I(MODULE_PREFIX, "Setting response code %s (%d)", RdWebInterface::getHTTPStatusStr(responseCode), responseCode);
 #endif
     _httpResponseStatus = responseCode;
 }
@@ -921,54 +736,21 @@ void RdWebConnection::setHTTPResponseStatus(RdHttpStatusCode responseCode)
 
 bool RdWebConnection::rawSendOnConn(const uint8_t* pBuf, uint32_t bufLen)
 {
-    // Check active
-    if (_connClient == WEB_CONN_CLIENT_INVALID_VALUE)
+    // Check connection
+    if (!_pClientConn)
     {
-        LOG_W(MODULE_PREFIX, "rawSendOnConn invalid conn %ld", 
-                    (unsigned long) _connClient);
+        LOG_W(MODULE_PREFIX, "rawSendOnConn conn is nullptr");
         return false;
     }
 
+#ifdef DEBUG_WEB_CONNECTION_DATA_PACKETS_CONTENTS
+    String debugStr;
+    Utils::getHexStrFromBytes(pBuf, bufLen, debugStr);
+    LOG_I(MODULE_PREFIX, "connId %d TX: %s", _pClientConn->getClientId(), debugStr.c_str());
+#endif
+
     // Send
-#ifndef ESP8266
-#ifdef WEB_CONN_USE_BERKELEY_SOCKETS
-    int rslt = send(_connClient, pBuf, bufLen, 0);
-    if (rslt < 0)
-    {
-        LOG_W(MODULE_PREFIX, "rawSendOnConn write failed errno %d conn %ld", 
-                    errno, (unsigned long) _connClient);
-        return false;
-    }
-#ifdef DEBUG_WEB_CONNECTION_DATA_PACKETS_CONTENTS
-    String debugStr;
-    Utils::getHexStrFromBytes(pBuf, bufLen, debugStr);
-    LOG_I(MODULE_PREFIX, "conn %ld TX: %s", (unsigned long)_connClient, debugStr.c_str());
-#endif
-    return true;
-#else
-    int err = netconn_write(_connClient, pBuf, bufLen, NETCONN_COPY);
-    if (err != ERR_OK)
-    {
-        LOG_W(MODULE_PREFIX, "rawSendOnConn write failed err %s (%d) pConn %ld", 
-                    RdWebInterface::espIdfErrToStr(err), err, (unsigned long)_connClient);
-    }
-#ifdef DEBUG_WEB_CONNECTION_DATA_PACKETS_CONTENTS
-    String debugStr;
-    Utils::getHexStrFromBytes(pBuf, bufLen, debugStr);
-    LOG_I(MODULE_PREFIX, "conn %ld TX: %s", (unsigned long)_connClient, debugStr.c_str());
-#endif
-    return err == ERR_OK;
-#endif
-#else // ESP8266
-    int err = ERR_OK;
-    size_t written = _connClient->write((const char*)pBuf, bufLen);
-    if (written != bufLen)
-    {
-        LOG_I(MODULE_PREFIX, "connectionWrite written %d != size %d", written, size);
-        err = ERR_CONN;
-    }
-    return err = ERR_OK;
-#endif // ESP8266
+    return _pClientConn->write(pBuf, bufLen);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -984,8 +766,7 @@ void RdWebConnection::sendStandardHeaders()
     rawSendOnConn((const uint8_t*)respLine, strlen(respLine));
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
     // Debug
-    LOG_I(MODULE_PREFIX, "serviceResponse sent %s pConn %ld", 
-                    respLine, (unsigned long) _connClient);
+    LOG_I(MODULE_PREFIX, "serviceResponse sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
 #endif
 
     // Get the content type
@@ -995,8 +776,7 @@ void RdWebConnection::sendStandardHeaders()
         rawSendOnConn((const uint8_t*)respLine, strlen(respLine));
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
         // Debug
-        LOG_I(MODULE_PREFIX, "serviceResponse sent %s pConn %ld", 
-                        respLine, (unsigned long) _connClient);
+        LOG_I(MODULE_PREFIX, "serviceResponse sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
 #endif
     }
 
@@ -1010,8 +790,7 @@ void RdWebConnection::sendStandardHeaders()
             rawSendOnConn((const uint8_t*)respLine, strlen(respLine));
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
             // Debug
-            LOG_I(MODULE_PREFIX, "serviceResponse sent %s pConn %ld", 
-                        respLine, (unsigned long) _connClient);
+            LOG_I(MODULE_PREFIX, "serviceResponse sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
 #endif
         }
     }
@@ -1026,8 +805,7 @@ void RdWebConnection::sendStandardHeaders()
             rawSendOnConn((const uint8_t*)respLine, strlen(respLine));
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
             // Debug
-            LOG_I(MODULE_PREFIX, "serviceResponse sent %s pConn %ld", 
-                        respLine, (unsigned long) _connClient);
+            LOG_I(MODULE_PREFIX, "serviceResponse sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
 #endif
         }
     }
@@ -1039,8 +817,7 @@ void RdWebConnection::sendStandardHeaders()
         rawSendOnConn((const uint8_t*)respLine, strlen(respLine));
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
         // Debug
-        LOG_I(MODULE_PREFIX, "serviceResponse sent %s pConn %ld", 
-                respLine, (unsigned long) _connClient);
+        LOG_I(MODULE_PREFIX, "serviceResponse sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
 #endif
     }
 
@@ -1061,8 +838,7 @@ void RdWebConnection::handleResponseWithBuffer(uint8_t* pSendBuffer)
     {
         // Debug
 #ifdef DEBUG_RESPONDER_CONTENT_DETAIL
-        LOG_I(MODULE_PREFIX, "serviceResponse writing %d conn %ld", 
-                        respSize, (unsigned long)_connClient);
+        LOG_I(MODULE_PREFIX, "serviceResponse writing %d clientId %d", respSize, _pClientConn ? _pClientConn->getClientId() : 0);
 #endif
 
         // Check if standard reponse to be sent first

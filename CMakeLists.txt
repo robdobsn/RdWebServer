@@ -1,5 +1,9 @@
 idf_component_register(
                 SRCS 
+                  "src/RdClientListener.cpp"
+                  "src/RdClientConnSockets.cpp"
+                  "src/RdClientConnNetconn.cpp"
+                  "src/RdClientConnESP8266.cpp"
                   "src/RdWebInterface.cpp"
                   "src/RdWebServer.cpp"
                   "src/RdWebConnManager.cpp"

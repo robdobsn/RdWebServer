@@ -11,6 +11,7 @@
 #include "RdWebServerSettings.h"
 #include <RdWebConnection.h>
 #include <RdWebSocketDefs.h>
+#include <RdClientListener.h>
 #ifndef ESP8266
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -38,9 +39,12 @@ public:
 
     // Service
     void service();
-
-    // Handle an incoming connection
-    bool handleNewConnection(RdWebConnClientType& connClient);
+    
+    // Listen for client connections
+    void listenForClients(int port, uint32_t numConnSlots)
+    {
+        _connClientListener.listenForClients(port, numConnSlots);
+    }
 
     // Handler
     bool addHandler(RdWebHandler* pHandler);
@@ -50,9 +54,6 @@ public:
     {
         _stdResponseHeaders.push_back(headerInfo);
     }
-
-    // New HTTP connection
-    void onConnection(RdWebConnClientType& connClient);
 
     // Get new responder
     // NOTE: this returns a new object or NULL
@@ -104,13 +105,19 @@ private:
     // Connections
     std::vector<RdWebConnection> _webConnections;
 
+    // Client Connection Listener
+    RdClientListener _connClientListener;
+
     // Client connection handler task
     static void clientConnHandlerTask(void* pvParameters);
 
     // Helpers
-    bool accommodateConnection(RdWebConnClientType& connClient);
+    bool accommodateConnection(RdClientConnBase* pClientConn);
     bool findEmptySlot(uint32_t& slotIx);
     void serviceConnections();
     RdWebHandler* getWebSocketHandler();
     bool allocateWebSocketChannelID(uint32_t& protocolChannelID);
+    // Handle an incoming connection
+    bool handleNewConnection(RdClientConnBase* pClientConn);
+
 };

@@ -12,40 +12,7 @@
 #include "RdWebConnDefs.h"
 #include "RdWebRequestParams.h"
 #include "RdWebRequestHeader.h"
-
-#define WEB_CONN_USE_BERKELEY_SOCKETS
-
-// Handle different platforms and netconn vs sockets
-#ifndef ESP8266
-#ifdef WEB_CONN_USE_BERKELEY_SOCKETS
-typedef int RdWebConnClientType;
-#define WEB_CONN_CLIENT_INVALID_VALUE (-1)
-#else
-typedef struct netconn* RdWebConnClientType;
-#define WEB_CONN_CLIENT_INVALID_VALUE nullptr
-#endif
-
-#ifdef CONFIG_LWIP_TCP_MSS
-#define WEB_CONN_MAX_RX_BUFFER CONFIG_LWIP_TCP_MSS
-#else
-#define WEB_CONN_MAX_RX_BUFFER 1440
-#endif
-
-extern "C"
-{
-#undef INADDR_NONE
-#include "lwip/opt.h"
-#include "lwip/tcp.h"
-#include "lwip/inet.h"
-#include "lwip/dns.h"
-#include "lwip/err.h"
-#include "lwip/sockets.h"
-}
-#else // ESP8266
-#include <WiFiClient.h>
-#include <ESP8266Utils.h>
-typedef WiFiClient* RdWebConnClientType;
-#endif //ESP8266
+#include "RdClientConnBase.h"
 
 // #define DEBUG_TRACE_HEAP_USAGE_WEB_CONN
 
@@ -68,14 +35,11 @@ public:
     // Send on server-side events
     void sendOnSSEvents(const char* eventContent, const char* eventGroup);
 
-    // Clear
+    // Clear (closes connection if open)
     void clear();
 
-    // Close and clear
-    void closeAndClear();
-
     // Set a new connection
-    void setNewConn(RdWebConnClientType& connClient, RdWebConnManager* pConnManager,
+    bool setNewConn(RdClientConnBase* pClientConn, RdWebConnManager* pConnManager,
                 uint32_t maxSendBufferBytes);
 
     // True if active
@@ -96,13 +60,17 @@ public:
 private:
 
     // Max size of buffer permitted on the stack
+#ifndef ESP8266
     static const uint32_t MAX_BUFFER_ALLOCATED_ON_STACK = 1000;
+#else
+    static const uint32_t MAX_BUFFER_ALLOCATED_ON_STACK = 0;
+#endif
 
     // Connection manager
     RdWebConnManager* _pConnManager;
 
-    // Connection - we're active if this is not NULL
-    RdWebConnClientType _connClient;
+    // Client connection
+    RdClientConnBase* _pClientConn;
 
     // Header parse info
     String _parseHeaderStr;
@@ -151,11 +119,6 @@ private:
 
     // Select handler
     void selectHandler();
-
-#ifndef WEB_CONN_USE_BERKELEY_SOCKETS
-    // Service data
-    bool getRxData(struct netbuf** pInbuf, bool& closeRequired);
-#endif
 
     // Service connection header
     bool serviceConnHeader(const uint8_t* pRxData, uint32_t dataLen, uint32_t& curBufPos);
