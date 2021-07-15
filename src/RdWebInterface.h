@@ -11,7 +11,6 @@
 #include "stdint.h"
 #include "stddef.h"
 #include <functional>
-#include <functional>
 extern "C"
 {
 #include "lwip/err.h"
@@ -19,6 +18,7 @@ extern "C"
 
 class FileBlockInfo;
 class String;
+class APISourceInfo;
 
 // Web methods
 enum RdWebServerMethod
@@ -138,8 +138,9 @@ public:
 };
 
 // Endpoint functions
-typedef std::function<void(String &reqStr, String &respStr)> RdWebAPIFunction;
-typedef std::function<void(String &reqStr, const uint8_t *pData, size_t len, size_t index, size_t total)> RdWebAPIFnBody;
+typedef std::function<void(String &reqStr, String &respStr, const APISourceInfo& sourceInfo)> RdWebAPIFunction;
+typedef std::function<void(String &reqStr, const uint8_t *pData, size_t len, size_t index, 
+					size_t total, const APISourceInfo& sourceInfo)> RdWebAPIFnBody;
 typedef std::function<void(String &reqStr, FileBlockInfo& fileBlockInfo)> RdWebAPIFnUpload;
 
 // REST API support

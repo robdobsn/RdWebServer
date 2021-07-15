@@ -9,6 +9,7 @@
 #include "RdWebResponderRestAPI.h"
 #include <Logger.h>
 #include <FileBlockInfo.h>
+#include <APISourceInfo.h>
 
 static const char *MODULE_PREFIX = "RdWebRespREST";
 
@@ -84,7 +85,8 @@ bool RdWebResponderRestAPI::handleData(const uint8_t* pBuf, uint32_t dataLen)
 #endif
         // Send as the body
         if (_endpoint.restApiFnBody)
-            _endpoint.restApiFnBody(_requestStr, pBuf, dataLen, 0, dataLen);
+            _endpoint.restApiFnBody(_requestStr, pBuf, dataLen, 0, dataLen, 
+                        APISourceInfo(_reqParams.getProtocolChannelID()));
     }
     return true;
 }
@@ -133,7 +135,8 @@ uint32_t RdWebResponderRestAPI::getResponseNext(uint8_t* pBuf, uint32_t bufMaxLe
         // Call endpoint
         String retStr;
         if (_endpoint.restApiFn)
-            _endpoint.restApiFn(_requestStr, retStr);
+            _endpoint.restApiFn(_requestStr, retStr, 
+                        APISourceInfo(_reqParams.getProtocolChannelID()));
 
         // Check how much of buffer to send
         respLen = bufMaxLen > retStr.length() ? retStr.length() : bufMaxLen;

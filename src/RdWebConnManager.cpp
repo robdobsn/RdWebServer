@@ -275,7 +275,7 @@ RdWebResponder *RdWebConnManager::getNewResponder(const RdWebRequestHeader &head
 // Check if websocket is ready to send
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool RdWebConnManager::webSocketCanSend(uint32_t &protocolChannelID)
+bool RdWebConnManager::webSocketCanSend(uint32_t& protocolChannelID)
 {
     // Find websocket responder corresponding to channel
     for (uint32_t i = 0; i < _webConnections.size(); i++)
@@ -285,7 +285,7 @@ bool RdWebConnManager::webSocketCanSend(uint32_t &protocolChannelID)
             continue;
 
         // Get responder
-        RdWebResponder *pResponder = _webConnections[i].getResponder();
+        RdWebResponder* pResponder = _webConnections[i].getResponder();
         if (!pResponder)
             continue;
 
@@ -310,7 +310,7 @@ bool RdWebConnManager::webSocketCanSend(uint32_t &protocolChannelID)
 // Send to all WebSockets
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool RdWebConnManager::webSocketSendMsg(const uint8_t *pBuf, uint32_t bufLen,
+bool RdWebConnManager::webSocketSendMsg(const uint8_t* pBuf, uint32_t bufLen,
                                         bool allWebSockets, uint32_t protocolChannelID)
 {
     bool anyOk = false;
@@ -364,7 +364,7 @@ bool RdWebConnManager::webSocketSendMsg(const uint8_t *pBuf, uint32_t bufLen,
 // Allocate WebSocket channelID
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool RdWebConnManager::allocateWebSocketChannelID(uint32_t &protocolChannelID)
+bool RdWebConnManager::allocateWebSocketChannelID(uint32_t& protocolChannelID)
 {
     // Get list of web-socket channel IDs
     RdWebHandler *pWsHandler = getWebSocketHandler();
