@@ -34,12 +34,11 @@ static const char *MODULE_PREFIX = "RdWebRespWS";
 RdWebResponderWS::RdWebResponderWS(RdWebHandler* pWebHandler, const RdWebRequestParams& params, 
             const String& reqStr, const RdWebServerSettings& webServerSettings,
             RdWebSocketCanAcceptCB canAcceptMsgCB, RdWebSocketMsgCB sendMsgCB)
-    : _reqParams(params), _canAcceptMsgCB(canAcceptMsgCB), _sendMsgCB(sendMsgCB)
+    : _reqParams(params), _canAcceptMsgCB(canAcceptMsgCB), _sendMsgCB(sendMsgCB), _txQueue(WEB_SOCKET_TX_QUEUE_SIZE)
 {
     // Store socket info
     _pWebHandler = pWebHandler;
     _requestStr = reqStr;
-    _txQueue.setMaxLen(WEB_SOCKET_TX_QUEUE_SIZE);
 
     // Init socket link
     _webSocketLink.setup(std::bind(&RdWebResponderWS::webSocketCallback, this, 
