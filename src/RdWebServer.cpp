@@ -49,7 +49,7 @@ void RdWebServer::setup(RdWebServerSettings& settings)
 
     // Start network interface if not already started
 #ifndef ESP8266
-#ifdef USE_IDF_V4_1_NETIF_METHODS
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 1, 0)
         if (esp_netif_init() != ESP_OK) {
             LOG_E(MODULE_PREFIX, "could not start netif");
         }

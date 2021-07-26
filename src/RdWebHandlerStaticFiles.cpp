@@ -15,7 +15,7 @@
 #include <Logger.h>
 #include <FileSystem.h>
 
-// #define DEBUG_STATIC_FILE_HANDLER 1
+// #define DEBUG_STATIC_FILE_HANDLER
 
 #ifdef DEBUG_STATIC_FILE_HANDLER
 static const char* MODULE_PREFIX = "RdWebHStatFile";

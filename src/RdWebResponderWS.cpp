@@ -15,13 +15,17 @@
 #include <Logger.h>
 #include <Utils.h>
 
+// Warn
+#define WARN_WS_SEND_APP_DATA_FAIL
+
+// Debug
 // #define DEBUG_RESPONDER_WS
 // #define DEBUG_WS_SEND_APP_DATA
 // #define DEBUG_WS_SEND_APP_DATA_ASCII
 // #define DEBUG_WEBSOCKETS_OPEN_CLOSE
 // #define DEBUG_WEBSOCKETS_TRAFFIC
+// #define DEBUG_WEBSOCKETS_TRAFFIC_BINARY_DETAIL
 // #define DEBUG_WEBSOCKETS_PING_PONG
-#define WARN_WS_SEND_APP_DATA_FAIL
 
 #if defined(WARN_WS_SEND_APP_DATA_FAIL)
 static const char *MODULE_PREFIX = "RdWebRespWS";
@@ -34,12 +38,11 @@ static const char *MODULE_PREFIX = "RdWebRespWS";
 RdWebResponderWS::RdWebResponderWS(RdWebHandler* pWebHandler, const RdWebRequestParams& params, 
             const String& reqStr, const RdWebServerSettings& webServerSettings,
             RdWebSocketCanAcceptCB canAcceptMsgCB, RdWebSocketMsgCB sendMsgCB)
-    : _reqParams(params), _canAcceptMsgCB(canAcceptMsgCB), _sendMsgCB(sendMsgCB)
+    : _reqParams(params), _canAcceptMsgCB(canAcceptMsgCB), _sendMsgCB(sendMsgCB), _txQueue(WEB_SOCKET_TX_QUEUE_SIZE)
 {
     // Store socket info
     _pWebHandler = pWebHandler;
     _requestStr = reqStr;
-    _txQueue.setMaxLen(WEB_SOCKET_TX_QUEUE_SIZE);
 
     // Init socket link
     _webSocketLink.setup(std::bind(&RdWebResponderWS::webSocketCallback, this, 
@@ -203,28 +206,28 @@ void RdWebResponderWS::webSocketCallback(RdWebSocketEventCode eventCode, const u
 		case WEBSOCKET_EVENT_CONNECT:
         {
 #ifdef DEBUG_WEBSOCKETS_OPEN_CLOSE
-			LOG_I(MODULE_PREFIX, "connected!");
+			LOG_I(MODULE_PREFIX, "webSocketCallback connected!");
 #endif
 			break;
         }
 		case WEBSOCKET_EVENT_DISCONNECT_EXTERNAL:
         {
 #ifdef DEBUG_WEBSOCKETS_OPEN_CLOSE
-			LOG_I(MODULE_PREFIX, "sent a disconnect message");
+			LOG_I(MODULE_PREFIX, "webSocketCallback sent disconnect");
 #endif
 			break;
         }
 		case WEBSOCKET_EVENT_DISCONNECT_INTERNAL:
         {
 #ifdef DEBUG_WEBSOCKETS_OPEN_CLOSE
-			LOG_I(MODULE_PREFIX, "was disconnected");
+			LOG_I(MODULE_PREFIX, "webSocketCallback was disconnected");
 #endif
 			break;
         }
 		case WEBSOCKET_EVENT_DISCONNECT_ERROR:
         {
 #ifdef DEBUG_WEBSOCKETS_OPEN_CLOSE
-			LOG_I(MODULE_PREFIX, "was disconnected due to an error");
+			LOG_I(MODULE_PREFIX, "webSocketCallback was disconnected due to an error");
 #endif
 			break;
         }
@@ -237,7 +240,7 @@ void RdWebResponderWS::webSocketCallback(RdWebSocketEventCode eventCode, const u
             String msgText;
             if (pBuf)
                 Utils::strFromBuffer(pBuf, bufLen, msgText);
-			LOG_I(MODULE_PREFIX, "sent text message of size %i content %s", bufLen, msgText.c_str());
+			LOG_I(MODULE_PREFIX, "webSocketCallback rx text len %i content %s", bufLen, msgText.c_str());
 #endif
 			break;
         }
@@ -247,21 +250,26 @@ void RdWebResponderWS::webSocketCallback(RdWebSocketEventCode eventCode, const u
             if (_sendMsgCB && (pBuf != NULL))
                 _sendMsgCB(_reqParams.getProtocolChannelID(), (uint8_t*) pBuf, bufLen);
 #ifdef DEBUG_WEBSOCKETS_TRAFFIC
-			LOG_I(MODULE_PREFIX, "sent binary message of size %i", bufLen);
+			LOG_I(MODULE_PREFIX, "webSocketCallback rx binary len %i", bufLen);
+#endif
+#ifdef DEBUG_WEBSOCKETS_TRAFFIC_BINARY_DETAIL
+            String rxDataStr;
+            Utils::getHexStrFromBytes(pBuf, bufLen, rxDataStr);
+			LOG_I(MODULE_PREFIX, "webSocketCallback rx binary len %s", rxDataStr.c_str());
 #endif
 			break;
         }
 		case WEBSOCKET_EVENT_PING:
         {
 #ifdef DEBUG_WEBSOCKETS_PING_PONG
-			LOG_I(MODULE_PREFIX, "pinged us with message of size %i", bufLen);
+			LOG_I(MODULE_PREFIX, "webSocketCallback rx ping len %i", bufLen);
 #endif
 			break;
         }
 		case WEBSOCKET_EVENT_PONG:
         {
 #ifdef DEBUG_WEBSOCKETS_PING_PONG
-			LOG_I(MODULE_PREFIX, "responded to the ping");
+			LOG_I(MODULE_PREFIX, "webSocketCallback sent pong");
 #endif
 		    break;
         }

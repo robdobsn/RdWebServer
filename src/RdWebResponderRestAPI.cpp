@@ -8,11 +8,14 @@
 
 #include "RdWebResponderRestAPI.h"
 #include <Logger.h>
-#include <FileBlockInfo.h>
+#include <FileStreamBlock.h>
+#include <APISourceInfo.h>
 
 static const char *MODULE_PREFIX = "RdWebRespREST";
 
 // #define DEBUG_RESPONDER_REST_API
+// #define DEBUG_RESPONDER_REST_API_NON_MULTIPART_DATA
+// #define DEBUG_RESPONDER_REST_API_MULTIPART_DATA
 // #define DEBUG_MULTIPART_EVENTS
 // #define DEBUG_MULTIPART_HEADERS
 // #define DEBUG_MULTIPART_DATA
@@ -23,13 +26,16 @@ static const char *MODULE_PREFIX = "RdWebRespREST";
 
 RdWebResponderRestAPI::RdWebResponderRestAPI(const RdWebServerRestEndpoint& endpoint, RdWebHandler* pWebHandler, 
                     const RdWebRequestParams& params, String& reqStr, const RdWebRequestHeaderExtract& headerExtract)
-    : _reqParams(params)
+    : _reqParams(params), _apiSourceInfo(params.getProtocolChannelID())
 {
     _endpoint = endpoint;
     _pWebHandler = pWebHandler;
     _endpointCalled = false;
     _requestStr = reqStr;
     _headerExtract = headerExtract;
+#ifdef APPLY_MIN_GAP_BETWEEN_API_CALLS_MS    
+    _lastFileReqMs = 0;
+#endif
 
     // Hook up callbacks
     _multipartParser.onEvent = std::bind(&RdWebResponderRestAPI::multipartOnEvent, this, 
@@ -47,8 +53,8 @@ RdWebResponderRestAPI::RdWebResponderRestAPI(const RdWebServerRestEndpoint& endp
     }
 
 #ifdef DEBUG_RESPONDER_REST_API
-    LOG_I(MODULE_PREFIX, "constr new responder %lx endpointDef %lx reqStr %s", (unsigned long)this, 
-                    (unsigned long)pEndpointDef, reqStr.c_str());
+    LOG_I(MODULE_PREFIX, "constr new responder %d reqStr %s", (uint32_t)this, 
+                    reqStr.c_str());
 #endif
 }
 
@@ -68,23 +74,23 @@ bool RdWebResponderRestAPI::handleData(const uint8_t* pBuf, uint32_t dataLen)
     // Handle data which may be multipart
     if (_headerExtract.isMultipart)
     {
-#ifdef DEBUG_RESPONDER_REST_API
+#ifdef DEBUG_RESPONDER_REST_API_MULTIPART_DATA
         LOG_I(MODULE_PREFIX, "handleData multipart len %d", dataLen);
 #endif
         _multipartParser.handleData(pBuf, dataLen);
-#ifdef DEBUG_RESPONDER_REST_API
+#ifdef DEBUG_RESPONDER_REST_API_MULTIPART_DATA
         LOG_I(MODULE_PREFIX, "handleData multipart finished bytesRx %d contentLen %d", 
                     _numBytesReceived, _headerExtract.contentLength);
 #endif
     }
     else
     {
-#ifdef DEBUG_RESPONDER_REST_API
+#ifdef DEBUG_RESPONDER_REST_API_NON_MULTIPART_DATA
         LOG_I(MODULE_PREFIX, "handleData len %d", dataLen);
 #endif
         // Send as the body
         if (_endpoint.restApiFnBody)
-            _endpoint.restApiFnBody(_requestStr, pBuf, dataLen, 0, dataLen);
+            _endpoint.restApiFnBody(_requestStr, pBuf, dataLen, 0, dataLen, _apiSourceInfo);
     }
     return true;
 }
@@ -133,7 +139,7 @@ uint32_t RdWebResponderRestAPI::getResponseNext(uint8_t* pBuf, uint32_t bufMaxLe
         // Call endpoint
         String retStr;
         if (_endpoint.restApiFn)
-            _endpoint.restApiFn(_requestStr, retStr);
+            _endpoint.restApiFn(_requestStr, retStr, _apiSourceInfo);
 
         // Check how much of buffer to send
         respLen = bufMaxLen > retStr.length() ? retStr.length() : bufMaxLen;
@@ -209,6 +215,25 @@ bool RdWebResponderRestAPI::leaveConnOpen()
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Check if ready for data
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+bool RdWebResponderRestAPI::readyForData()
+{
+#ifdef APPLY_MIN_GAP_BETWEEN_API_CALLS_MS
+    if (!Utils::isTimeout(millis(), _lastFileReqMs, APPLY_MIN_GAP_BETWEEN_API_CALLS_MS))
+        return false;
+    _lastFileReqMs = millis();
+    LOG_I(MODULE_PREFIX, "readyForData time %d", _lastFileReqMs);
+#endif
+
+    // Check if endpoint specifies a ready function
+    if (_endpoint.restApiFnIsReady)
+        return _endpoint.restApiFnIsReady(_apiSourceInfo);
+    return true;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Callbacks on multipart parser
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -227,13 +252,13 @@ void RdWebResponderRestAPI::multipartOnData(const uint8_t *pBuf, uint32_t bufLen
                 bufLen, formInfo._fileName.c_str(), contentPos, isFinalPart);
 #endif
     // Upload info
-    FileBlockInfo fileBlockInfo(formInfo._fileName.c_str(), 
+    FileStreamBlock fileStreamBlock(formInfo._fileName.c_str(), 
                     _headerExtract.contentLength, contentPos, 
                     pBuf, bufLen, isFinalPart, formInfo._crc16, formInfo._crc16Valid,
-                    formInfo._fileLenBytes, formInfo._fileLenValid);
+                    formInfo._fileLenBytes, formInfo._fileLenValid, contentPos==0);
     // Check for callback
-    if (_endpoint.restApiFnUpload)
-        _endpoint.restApiFnUpload(_requestStr, fileBlockInfo);
+    if (_endpoint.restApiFnChunk)
+        _endpoint.restApiFnChunk(_requestStr, fileStreamBlock, _apiSourceInfo);
 }
 
 void RdWebResponderRestAPI::multipartOnHeaderNameValue(const String& name, const String& val)

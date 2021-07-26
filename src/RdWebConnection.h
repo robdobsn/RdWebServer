@@ -89,9 +89,12 @@ private:
     RdHttpStatusCode _httpResponseStatus;
 
     // Timeout timer
-    static const uint32_t MAX_STD_CONN_DURATION_MS = 180000;
+    static const uint32_t MAX_STD_CONN_DURATION_MS = 3600000;
+    static const uint32_t MAX_CONN_IDLE_DURATION_MS = 60000;
     uint32_t _timeoutStartMs;
     uint32_t _timeoutDurationMs;
+    uint32_t _timeoutLastActivityMs;
+    uint32_t _timeoutOnIdleDurationMs;
     bool _timeoutActive;
 
     // Max send buffer size

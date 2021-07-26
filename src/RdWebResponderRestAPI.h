@@ -9,11 +9,16 @@
 #pragma once
 
 #include <WString.h>
+#include <Logger.h>
+#include <ArduinoTime.h>
+#include <Utils.h>
 #include "RdWebResponder.h"
 #include <RdWebRequestParams.h>
 #include <RdWebConnection.h>
-#include <Logger.h>
 #include "RdWebMultipart.h"
+#include "APISourceInfo.h"
+
+// #define APPLY_MIN_GAP_BETWEEN_API_CALLS_MS 200
 
 class RdWebHandler;
 
@@ -46,10 +51,7 @@ public:
     }
 
     // Ready for data
-    virtual bool readyForData() override final
-    {
-        return true;
-    }
+    virtual bool readyForData() override final;
 
 private:
     // Endpoint
@@ -74,6 +76,14 @@ private:
 
     // Multipart parser
     RdWebMultipart _multipartParser;
+
+    // API source
+    APISourceInfo _apiSourceInfo;
+
+    // Throttle back API requests
+#ifdef APPLY_MIN_GAP_BETWEEN_API_CALLS_MS    
+    uint32_t _lastFileReqMs;
+#endif
 
     // Helpers
     void multipartOnEvent(RdMultipartEvent event, const uint8_t *pBuf, uint32_t pos);

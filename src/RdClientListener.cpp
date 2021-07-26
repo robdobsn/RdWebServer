@@ -18,7 +18,7 @@
 
 static const char *MODULE_PREFIX = "RdClientListener";
 
-#define WEB_CONN_USE_BERKELEY_SOCKETS
+// #define WEB_CONN_USE_BERKELEY_SOCKETS
 
 #define WARN_ON_LISTENER_ERROR
 // #define DEBUG_NEW_CONNECTION
@@ -208,7 +208,6 @@ void RdClientListener::listenForClients(int port, uint32_t numConnSlots)
         // Delay hoping networking recovers
         delay(5000);
     }
+}
 
 #endif
-
-}

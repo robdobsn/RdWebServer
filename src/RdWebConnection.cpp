@@ -103,8 +103,10 @@ bool RdWebConnection::setNewConn(RdClientConnBase* pClientConn, RdWebConnManager
     _pClientConn = pClientConn;
     _pConnManager = pConnManager;
     _timeoutStartMs = millis();
+    _timeoutLastActivityMs = millis();
     _timeoutActive = true;
     _timeoutDurationMs = MAX_STD_CONN_DURATION_MS;
+    _timeoutOnIdleDurationMs = MAX_CONN_IDLE_DURATION_MS;
     _maxSendBufferBytes = maxSendBufferBytes;
 
     // Set non-blocking connection
@@ -151,7 +153,9 @@ void RdWebConnection::clear()
     _sendSpecificHeaders = true;
     _httpResponseStatus = HTTP_STATUS_OK;
     _timeoutStartMs = 0;
-    _timeoutDurationMs = 0;
+    _timeoutLastActivityMs = 0;
+    _timeoutDurationMs = MAX_STD_CONN_DURATION_MS;
+    _timeoutOnIdleDurationMs = MAX_CONN_IDLE_DURATION_MS;
     _timeoutActive = false;
     _parseHeaderStr = "";
     _debugDataRxCount = 0;
@@ -222,26 +226,48 @@ void RdWebConnection::service()
         return;
 
     // Check timout
-    if (_timeoutActive && Utils::isTimeout(millis(), _timeoutStartMs, _timeoutDurationMs))
+    if (_timeoutActive && (Utils::isTimeout(millis(), _timeoutStartMs, _timeoutDurationMs) ||
+                    Utils::isTimeout(millis(), _timeoutLastActivityMs, _timeoutOnIdleDurationMs)))
     {
         LOG_W(MODULE_PREFIX, "service timeout on connection connId %d", _pClientConn->getClientId());
         clear();
         return;
     }
 
-    // Service responder
+    // Service responder and check if ready for data, if there is no responder
+    // then always ready as we're building the header, etc
+    bool checkForNewData = true;
     if (_pResponder)
+    {
         _pResponder->service();
+        checkForNewData = _pResponder->readyForData();
+    }
 
-    // Check for new data
+    // Check for new data if required
     uint32_t dataLen = 0;
     bool closeRequired = false;
-    uint8_t* pData = _pClientConn->getDataStart(dataLen, closeRequired);
-    bool dataAvailable = (pData != nullptr) && (dataLen != 0);
+    uint8_t* pData = nullptr;
+    bool dataAvailable = false;
+    if (checkForNewData)
+    {
+#ifdef DEBUG_WEB_CONN_SERVICE_TIME
+        uint32_t getDataStartMs = millis();
+#endif
+        pData = _pClientConn->getDataStart(dataLen, closeRequired);
+        dataAvailable = (pData != nullptr) && (dataLen != 0);
+#ifdef DEBUG_WEB_CONN_SERVICE_TIME
+        LOG_I(MODULE_PREFIX, "service getDataStart timeMs %ld dataAvail %d dataLen %d", 
+                    millis() - getDataStartMs, dataAvailable, dataLen);
+#endif
+    }
 
-    // Debug and stats
+    // Check if data available
     if (dataAvailable)
     {
+        // Update for timeout
+        _timeoutLastActivityMs = millis();
+
+        // Update stats
         _debugDataRxCount += dataLen;
 #ifdef DEBUG_WEB_CONNECTION_DATA_PACKETS
         LOG_I(MODULE_PREFIX, "service got new data len %d rxTotal %d", dataLen, _debugDataRxCount);
@@ -258,16 +284,26 @@ void RdWebConnection::service()
     bool errorOccurred = false;
     if (dataAvailable && !_header.isComplete)
     {
+#ifdef DEBUG_WEB_CONN_SERVICE_TIME
+        uint32_t startMs = millis();
+#endif
         if (!serviceConnHeader(pData, dataLen, bufPos))
         {
             LOG_W(MODULE_PREFIX, "service connHeader error closing connId %d", _pClientConn->getClientId());
             errorOccurred = true;
         }
+#ifdef DEBUG_WEB_CONN_SERVICE_TIME
+        LOG_I(MODULE_PREFIX, "serviceConnHeader timeMs %ld", millis() - startMs);
+#endif
     }
 
-    // Service response - may remain in this state (e.g. for file-transfer / web-sockets)
-    if (dataAvailable && _header.isComplete)
+    // Service response - may remain in this state for multiple service loops
+    // (e.g. for file-transfer / web-sockets)
+    if (_header.isComplete)
     {
+#ifdef DEBUG_WEB_CONN_SERVICE_TIME
+        uint32_t startMs = millis();
+#endif
         if (!serviceResponse(pData, dataLen, bufPos))
         {
 #ifdef DEBUG_RESPONDER_PROGRESS
@@ -275,10 +311,22 @@ void RdWebConnection::service()
 #endif
             closeRequired = true;
         }
+#ifdef DEBUG_WEB_CONN_SERVICE_TIME
+        LOG_I(MODULE_PREFIX, "serviceResponse timeMs %ld", millis() - startMs);
+#endif
     }
 
-    // Data all handled
-    _pClientConn->getDataEnd();
+    // Data all handled if acquired
+    if (checkForNewData)
+    {
+#ifdef DEBUG_WEB_CONN_SERVICE_TIME
+        uint32_t startMs = millis();
+#endif
+        _pClientConn->getDataEnd();
+#ifdef DEBUG_WEB_CONN_SERVICE_TIME
+        LOG_I(MODULE_PREFIX, "getDataEnd timeMs %ld", millis() - startMs);
+#endif
+    }
 
     // Check for close
     if (errorOccurred || closeRequired)
@@ -402,17 +450,36 @@ bool RdWebConnection::serviceConnHeader(const uint8_t* pRxData, uint32_t dataLen
 
 bool RdWebConnection::serviceResponse(const uint8_t* pRxData, uint32_t dataLen, uint32_t& curBufPos)
 {
-    // Hand any data to responder (if there is one)
-    if (_pResponder && (curBufPos < dataLen))
+    // Hand any data (if there is any) to responder (if there is one)
+    if (_pResponder && (curBufPos < dataLen) && pRxData)
+    {
+#ifdef DEBUG_WEB_CONN_SERVICE_TIME
+        uint32_t startMs = millis();
+#endif
         _pResponder->handleData(pRxData+curBufPos, dataLen-curBufPos);
+#ifdef DEBUG_WEB_CONN_SERVICE_TIME
+        LOG_I(MODULE_PREFIX, "serviceResponse handleData timeMs %ld", millis() - startMs);
+#endif
+    }
 
     // Service the responder (if there is one)
     if (_pResponder)
+    {
+#ifdef DEBUG_WEB_CONN_SERVICE_TIME
+        uint32_t startMs = millis();
+#endif
         _pResponder->service();
+#ifdef DEBUG_WEB_CONN_SERVICE_TIME
+        LOG_I(MODULE_PREFIX, "serviceResponse responderService timeMs %ld", millis() - startMs);
+#endif
+    }
 
     // Handle active responder responses
     if (_pResponder && _pResponder->isActive())
     {
+#ifdef DEBUG_WEB_CONN_SERVICE_TIME
+        uint32_t startMs = millis();
+#endif
         // Get next chunk of response
         if (_maxSendBufferBytes > MAX_BUFFER_ALLOCATED_ON_STACK)
         {
@@ -425,13 +492,26 @@ bool RdWebConnection::serviceResponse(const uint8_t* pRxData, uint32_t dataLen, 
             uint8_t pSendBuffer[_maxSendBufferBytes];
             handleResponseWithBuffer(pSendBuffer);
         }
+
+        // Record time of activity for timeouts
+        _timeoutLastActivityMs = millis();
+
+#ifdef DEBUG_WEB_CONN_SERVICE_TIME
+        LOG_I(MODULE_PREFIX, "serviceResponse handleResponseWithBuffer timeMs %ld", millis() - startMs);
+#endif
     }
 
     // Send the standard response and headers if required    
     else if (_isStdHeaderRequired && (!_pResponder || _pResponder->isStdHeaderRequired()))
     {
         // Send standard headers
+#ifdef DEBUG_WEB_CONN_SERVICE_TIME
+        uint32_t startMs = millis();
+#endif
         sendStandardHeaders();
+#ifdef DEBUG_WEB_CONN_SERVICE_TIME
+        LOG_I(MODULE_PREFIX, "serviceResponse sendStandardHeaders timeMs %ld", millis() - startMs);
+#endif
 
         // Done headers
         _isStdHeaderRequired = false;
@@ -439,7 +519,7 @@ bool RdWebConnection::serviceResponse(const uint8_t* pRxData, uint32_t dataLen, 
 
     // Debug
 #ifdef DEBUG_RESPONDER_PROGRESS_DETAIL
-    LOG_I(MODULE_PREFIX, "serviceResponse atEnd responder %s isActive %s connId %d", 
+    LOG_I(MODULE_PREFIX, "serviceResponse responder %s isActive %s connId %d", 
                 _pResponder ? "YES" : "NO", 
                 (_pResponder && _pResponder->isActive()) ? "YES" : "NO", 
                 _pClientConn->getClientId());

@@ -11,10 +11,12 @@
 #ifndef ESP8266
 
 #include <WString.h>
+#include <Logger.h>
+#include <ArduinoTime.h>
 #include "RdWebResponder.h"
 #include "RdWebRequestParams.h"
+#include "FileSystemChunker.h"
 
-class FileSystemChunker;
 class RdWebHandler;
 
 class RdWebResponderFile : public RdWebResponder
@@ -56,7 +58,7 @@ public:
 private:
     String _filePath;
     RdWebHandler* _pWebHandler;
-    FileSystemChunker* _pChunker;
+    FileSystemChunker _fileChunker;
     RdWebRequestParams _reqParams;
     uint32_t _fileLength;
 };

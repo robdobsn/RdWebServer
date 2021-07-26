@@ -28,7 +28,9 @@ RdWebResponderFile::RdWebResponderFile(const String& filePath, RdWebHandler* pWe
 {
     _filePath = filePath;
     _pWebHandler = pWebHandler;
-    _pChunker = new FileSystemChunker();
+#ifdef DEBUG_RESPONDER_FILE
+    LOG_I(MODULE_PREFIX, "constructor filePath %s", filePath.c_str());
+#endif
 }
 
 RdWebResponderFile::~RdWebResponderFile()
@@ -53,9 +55,7 @@ bool RdWebResponderFile::handleData(const uint8_t* pBuf, uint32_t dataLen)
 
 bool RdWebResponderFile::startResponding(RdWebConnection& request)
 {
-    if (!_pChunker)
-        return false;
-    _isActive = _pChunker->start(_filePath, _reqParams.getMaxSendSize(), false);
+    _isActive = _fileChunker.start(_filePath, _reqParams.getMaxSendSize(), false, false, true);
 #ifdef DEBUG_RESPONDER_FILE_START_END
     LOG_I(MODULE_PREFIX, "startResponding isActive %d", _isActive);
 #endif
@@ -68,11 +68,9 @@ bool RdWebResponderFile::startResponding(RdWebConnection& request)
 
 uint32_t RdWebResponderFile::getResponseNext(uint8_t* pBuf, uint32_t bufMaxLen)
 {
-    if (!_pChunker)
-        return 0;
     uint32_t readLen = 0;
     bool finalChunk = false;
-    if (!_pChunker->next(pBuf, bufMaxLen, readLen, finalChunk))
+    if (!_fileChunker.nextRead(pBuf, bufMaxLen, readLen, finalChunk))
     {
         _isActive = false;
         LOG_W(MODULE_PREFIX, "getResponseNext failed");
@@ -144,9 +142,7 @@ const char* RdWebResponderFile::getContentType()
 
 int RdWebResponderFile::getContentLength()
 {
-    if (!_pChunker)
-        return 0;
-    return _pChunker->getFileLen();
+    return _fileChunker.getFileLen();
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
