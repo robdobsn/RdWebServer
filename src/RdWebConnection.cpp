@@ -306,7 +306,7 @@ void RdWebConnection::service()
 #ifdef DEBUG_WEB_CONN_SERVICE_TIME
         uint32_t startMs = millis();
 #endif
-        if (!serviceResponse(pData, dataLen, bufPos))
+        if (!serviceResponder(pData, dataLen, bufPos))
         {
 #ifdef DEBUG_RESPONDER_PROGRESS
             LOG_I(MODULE_PREFIX, "service no longer sending so close connId %d", _pClientConn->getClientId());
@@ -450,7 +450,7 @@ bool RdWebConnection::serviceConnHeader(const uint8_t* pRxData, uint32_t dataLen
 // Service responder
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool RdWebConnection::serviceResponse(const uint8_t* pRxData, uint32_t dataLen, uint32_t& curBufPos)
+bool RdWebConnection::serviceResponder(const uint8_t* pRxData, uint32_t dataLen, uint32_t& curBufPos)
 {
     // Hand any data (if there is any) to responder (if there is one)
     if (_pResponder && (curBufPos < dataLen) && pRxData)
@@ -848,7 +848,7 @@ void RdWebConnection::sendStandardHeaders()
     rawSendOnConn((const uint8_t*)respLine, strlen(respLine));
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
     // Debug
-    LOG_I(MODULE_PREFIX, "serviceResponse sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
+    LOG_I(MODULE_PREFIX, "sendStandardHeaders sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
 #endif
 
     // Get the content type
@@ -858,7 +858,7 @@ void RdWebConnection::sendStandardHeaders()
         rawSendOnConn((const uint8_t*)respLine, strlen(respLine));
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
         // Debug
-        LOG_I(MODULE_PREFIX, "serviceResponse sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
+        LOG_I(MODULE_PREFIX, "sendStandardHeaders sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
 #endif
     }
 
@@ -872,7 +872,7 @@ void RdWebConnection::sendStandardHeaders()
             rawSendOnConn((const uint8_t*)respLine, strlen(respLine));
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
             // Debug
-            LOG_I(MODULE_PREFIX, "serviceResponse sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
+            LOG_I(MODULE_PREFIX, "sendStandardHeaders sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
 #endif
         }
     }
@@ -887,7 +887,7 @@ void RdWebConnection::sendStandardHeaders()
             rawSendOnConn((const uint8_t*)respLine, strlen(respLine));
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
             // Debug
-            LOG_I(MODULE_PREFIX, "serviceResponse sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
+            LOG_I(MODULE_PREFIX, "sendStandardHeaders sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
 #endif
         }
     }
@@ -899,7 +899,7 @@ void RdWebConnection::sendStandardHeaders()
         rawSendOnConn((const uint8_t*)respLine, strlen(respLine));
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
         // Debug
-        LOG_I(MODULE_PREFIX, "serviceResponse sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
+        LOG_I(MODULE_PREFIX, "sendStandardHeaders sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
 #endif
     }
 
@@ -920,7 +920,7 @@ void RdWebConnection::handleResponseWithBuffer(uint8_t* pSendBuffer)
     {
         // Debug
 #ifdef DEBUG_RESPONDER_CONTENT_DETAIL
-        LOG_I(MODULE_PREFIX, "serviceResponse writing %d clientId %d", respSize, _pClientConn ? _pClientConn->getClientId() : 0);
+        LOG_I(MODULE_PREFIX, "handleResponseWithBuffer writing %d clientId %d", respSize, _pClientConn ? _pClientConn->getClientId() : 0);
 #endif
 
         // Check if standard reponse to be sent first

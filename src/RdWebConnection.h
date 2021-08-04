@@ -127,7 +127,7 @@ private:
     bool serviceConnHeader(const uint8_t* pRxData, uint32_t dataLen, uint32_t& curBufPos);
 
     // Service responder
-    bool serviceResponse(const uint8_t* pRxData, uint32_t dataLen, uint32_t& curBufPos);
+    bool serviceResponder(const uint8_t* pRxData, uint32_t dataLen, uint32_t& curBufPos);
 
     // Set HTTP response status
     void setHTTPResponseStatus(RdHttpStatusCode reponseCode);
