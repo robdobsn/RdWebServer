@@ -12,8 +12,13 @@
 #include "RdWebConnDefs.h"
 #include <stdint.h>
 #include <string.h>
+
 #ifndef ESP8266
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 1, 0)
+#include "esp_netif.h"
+#else
 #include "tcpip_adapter.h"
+#endif
 #endif
 
 static const char *MODULE_PREFIX = "RdWebServer";

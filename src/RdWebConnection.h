@@ -61,7 +61,7 @@ private:
 
     // Max size of buffer permitted on the stack
 #ifndef ESP8266
-    static const uint32_t MAX_BUFFER_ALLOCATED_ON_STACK = 1000;
+    static const uint32_t MAX_BUFFER_ALLOCATED_ON_STACK = 300;
 #else
     static const uint32_t MAX_BUFFER_ALLOCATED_ON_STACK = 0;
 #endif

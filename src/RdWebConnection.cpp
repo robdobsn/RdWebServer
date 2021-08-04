@@ -19,8 +19,10 @@
 
 static const char *MODULE_PREFIX = "RdWebConn";
 
+// Warn
 #define WARN_WEB_CONN_ERROR_CLOSE
-// #define DEBUG_WEB_CONN
+
+// Debug
 // #define DEBUG_WEB_REQUEST_HEADERS
 // #define DEBUG_WEB_REQUEST_HEADER_DETAIL
 // #define DEBUG_WEB_REQUEST_READ

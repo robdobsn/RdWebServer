@@ -14,7 +14,6 @@
 #include <ArduinoTime.h>
 #include "lwip/api.h"
 #include "lwip/sockets.h"
-#include "tcpip_adapter.h"
 
 static const char *MODULE_PREFIX = "RdClientListener";
 

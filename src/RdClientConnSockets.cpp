@@ -99,6 +99,9 @@ uint8_t* RdClientConnSockets::getDataStart(uint32_t& dataLen, bool& closeRequire
         return nullptr;
     }
 
+    // Return received data
+    closeRequired = false;
+    dataLen = bufLen;
     return _pDataBuf;
 }
 
