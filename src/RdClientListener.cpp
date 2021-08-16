@@ -17,7 +17,7 @@
 
 static const char *MODULE_PREFIX = "RdClientListener";
 
-// #define WEB_CONN_USE_BERKELEY_SOCKETS
+#define WEB_CONN_USE_BERKELEY_SOCKETS
 
 #define WARN_ON_LISTENER_ERROR
 // #define DEBUG_NEW_CONNECTION

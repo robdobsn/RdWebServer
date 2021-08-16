@@ -132,6 +132,9 @@ void RdWebConnManager::serviceConnections()
     }
 
     // Get any new connection from queue
+    if (_newConnQueue == nullptr)
+        return;
+        
 #ifndef ESP8266
     RdClientConnBase* pClientConn = nullptr;
     if (xQueueReceive(_newConnQueue, &pClientConn, 1) == pdTRUE)
