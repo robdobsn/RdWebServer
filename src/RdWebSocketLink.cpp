@@ -328,13 +328,13 @@ bool RdWebSocketLink::sendMsg(WebSocketOpCodes opCode, const uint8_t *pBuf, uint
 
     // Send
     if (_rawConnSendFn)
-        _rawConnSendFn(frameBuffer.data(), frameBuffer.size());
+        return _rawConnSendFn(frameBuffer.data(), frameBuffer.size());
 
 #ifdef DEBUG_WEBSOCKET_SEND
     LOG_I(MODULE_PREFIX, "WebSocket sendMsg send %d bytes", frameBuffer.size());
 #endif
 
-    return true;
+    return false;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////

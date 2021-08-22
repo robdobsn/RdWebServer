@@ -136,8 +136,8 @@ private:
     bool rawSendOnConn(const uint8_t* pBuf, uint32_t bufLen);    
 
     // Send standard headers
-    void sendStandardHeaders();
+    bool sendStandardHeaders();
 
     // Handle response using buffer provided
-    void handleResponseWithBuffer(uint8_t* pSendBuffer);
+    bool handleResponseWithBuffer(uint8_t* pSendBuffer);
 };

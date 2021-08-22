@@ -46,7 +46,7 @@ bool RdClientConnNetconn::write(const uint8_t* pBuf, uint32_t bufLen)
     esp_err_t err = netconn_write(_client, pBuf, bufLen, NETCONN_COPY);
     if (err != ERR_OK)
     {
-        LOG_W(MODULE_PREFIX, "rawSendOnConn write failed err %s (%d) connClient %d",
+        LOG_W(MODULE_PREFIX, "write failed err %s (%d) connClient %d",
                     RdWebInterface::espIdfErrToStr(err), err, getClientId());
     }
     return err == ERR_OK;

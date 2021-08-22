@@ -14,7 +14,9 @@
 #include "lwip/api.h"
 #include "lwip/sockets.h"
 
-static const char *MODULE_PREFIX = "RdClientConn8266";
+static const char *MODULE_PREFIX = "RdClientConnSockets";
+
+#define DEBUG_RETRY_ON_SOCKET_EAGAIN
 
 RdClientConnSockets::RdClientConnSockets(int client)
 {
@@ -52,13 +54,26 @@ bool RdClientConnSockets::write(const uint8_t* pBuf, uint32_t bufLen)
     }
 
     // Write using socket
-    int rslt = send(_client, pBuf, bufLen, 0);
-    if (rslt < 0)
+    for (uint32_t retryIdx = 0; retryIdx < MAX_RETRIES_ON_EAGAIN_ERROR; retryIdx++)
     {
-        LOG_W(MODULE_PREFIX, "write failed errno %d conn %d", errno, getClientId());
-        return false;
+        int rslt = send(_client, pBuf, bufLen, 0);
+        if (rslt < 0)
+        {
+            if (errno == EAGAIN)
+            {
+#ifdef DEBUG_RETRY_ON_SOCKET_EAGAIN
+                LOG_I(MODULE_PREFIX, "write failed errno %d conn %d", errno, getClientId());
+#endif
+                vTaskDelay(1);
+                continue;
+            }
+            LOG_W(MODULE_PREFIX, "write failed errno %d conn %d", errno, getClientId());
+            return false;
+        }
+        return true;
     }
-    return true;
+    LOG_W(MODULE_PREFIX, "write failed errno %d conn %d retries %d", errno, getClientId(), MAX_RETRIES_ON_EAGAIN_ERROR);
+    return false;
 }
 
 uint8_t* RdClientConnSockets::getDataStart(uint32_t& dataLen, bool& closeRequired)

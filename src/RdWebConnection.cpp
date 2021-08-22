@@ -501,6 +501,7 @@ bool RdWebConnection::responderHandleData(const uint8_t* pRxData, uint32_t dataL
 #endif
 
     // Hand any data (if there is any) to responder (if there is one)
+    bool errorOccurred = false;
     if (_pResponder && (curBufPos < dataLen) && pRxData)
     {
         _pResponder->handleData(pRxData+curBufPos, dataLen-curBufPos);
@@ -531,13 +532,13 @@ bool RdWebConnection::responderHandleData(const uint8_t* pRxData, uint32_t dataL
         if (_maxSendBufferBytes > MAX_BUFFER_ALLOCATED_ON_STACK)
         {
             uint8_t* pSendBuffer = new uint8_t[_maxSendBufferBytes];
-            handleResponseWithBuffer(pSendBuffer);
+            errorOccurred = !handleResponseWithBuffer(pSendBuffer);
             delete [] pSendBuffer;
         }
         else
         {
             uint8_t pSendBuffer[_maxSendBufferBytes];
-            handleResponseWithBuffer(pSendBuffer);
+            errorOccurred = !handleResponseWithBuffer(pSendBuffer);
         }
 
         // Record time of activity for timeouts
@@ -555,7 +556,9 @@ bool RdWebConnection::responderHandleData(const uint8_t* pRxData, uint32_t dataL
 #ifdef DEBUG_WEB_RESPONDER_HDL_DATA_TIME_THRESH_MS
         uint32_t debugSendStdHdrStartMs = millis();
 #endif
-        sendStandardHeaders();
+
+        errorOccurred = !sendStandardHeaders();
+
 #ifdef DEBUG_WEB_RESPONDER_HDL_DATA_TIME_THRESH_MS
         debugSendStdHdrElapMs = millis() - debugSendStdHdrStartMs;
 #endif
@@ -585,7 +588,7 @@ bool RdWebConnection::responderHandleData(const uint8_t* pRxData, uint32_t dataL
 #endif
 
     // If no responder then that's it
-    if (!_pResponder)
+    if (!_pResponder || errorOccurred)
         return false;
 
     // Return indication of more to come
@@ -682,7 +685,8 @@ bool RdWebConnection::parseHeaderLine(const String& line)
         if (_header.isContinue)
         {
             const char *response = "HTTP/1.1 100 Continue\r\n\r\n";
-            rawSendOnConn((const uint8_t*) response, strlen(response));
+            if (!rawSendOnConn((const uint8_t*) response, strlen(response)))
+                return false;
         }
 
         // Header now complete
@@ -896,13 +900,15 @@ bool RdWebConnection::rawSendOnConn(const uint8_t* pBuf, uint32_t bufLen)
 // Send standard headers
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void RdWebConnection::sendStandardHeaders()
+bool RdWebConnection::sendStandardHeaders()
 {
     // Send the first line
     char respLine[100];
     snprintf(respLine, sizeof(respLine), "HTTP/1.1 %d %s\r\n", _httpResponseStatus, 
                 RdWebInterface::getHTTPStatusStr(_httpResponseStatus));
-    rawSendOnConn((const uint8_t*)respLine, strlen(respLine));
+    if (!rawSendOnConn((const uint8_t*)respLine, strlen(respLine)))
+        return false;
+
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
     // Debug
     LOG_I(MODULE_PREFIX, "sendStandardHeaders sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
@@ -912,7 +918,9 @@ void RdWebConnection::sendStandardHeaders()
     if (_pResponder && _pResponder->getContentType())
     {
         snprintf(respLine, sizeof(respLine), "Content-Type: %s\r\n", _pResponder->getContentType());
-        rawSendOnConn((const uint8_t*)respLine, strlen(respLine));
+        if (!rawSendOnConn((const uint8_t*)respLine, strlen(respLine)))
+            return false;
+
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
         // Debug
         LOG_I(MODULE_PREFIX, "sendStandardHeaders sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
@@ -926,7 +934,9 @@ void RdWebConnection::sendStandardHeaders()
         for (RdJson::NameValuePair& nvPair : *pRespHeaders)
         {
             snprintf(respLine, sizeof(respLine), "%s: %s\r\n", nvPair.name.c_str(), nvPair.value.c_str());
-            rawSendOnConn((const uint8_t*)respLine, strlen(respLine));
+            if (!rawSendOnConn((const uint8_t*)respLine, strlen(respLine)))
+                return false;
+
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
             // Debug
             LOG_I(MODULE_PREFIX, "sendStandardHeaders sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
@@ -941,7 +951,9 @@ void RdWebConnection::sendStandardHeaders()
         if (contentLength >= 0)
         {
             snprintf(respLine, sizeof(respLine), "Content-Length: %d\r\n", contentLength);
-            rawSendOnConn((const uint8_t*)respLine, strlen(respLine));
+            if (!rawSendOnConn((const uint8_t*)respLine, strlen(respLine)))
+                return false;
+
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
             // Debug
             LOG_I(MODULE_PREFIX, "sendStandardHeaders sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
@@ -953,7 +965,9 @@ void RdWebConnection::sendStandardHeaders()
     if (!_pResponder || !_pResponder->leaveConnOpen())
     {
         snprintf(respLine, sizeof(respLine), "Connection: close\r\n");
-        rawSendOnConn((const uint8_t*)respLine, strlen(respLine));
+        if (!rawSendOnConn((const uint8_t*)respLine, strlen(respLine)))
+            return false;
+
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
         // Debug
         LOG_I(MODULE_PREFIX, "sendStandardHeaders sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
@@ -961,14 +975,14 @@ void RdWebConnection::sendStandardHeaders()
     }
 
     // Send end of header line
-    rawSendOnConn((const uint8_t*)"\r\n", 2);
+    return rawSendOnConn((const uint8_t*)"\r\n", 2);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Handle response with buffer provided
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void RdWebConnection::handleResponseWithBuffer(uint8_t* pSendBuffer)
+bool RdWebConnection::handleResponseWithBuffer(uint8_t* pSendBuffer)
 {
     uint32_t respSize = _pResponder->getResponseNext(pSendBuffer, _maxSendBufferBytes);
 
@@ -984,13 +998,15 @@ void RdWebConnection::handleResponseWithBuffer(uint8_t* pSendBuffer)
         if (_isStdHeaderRequired && _pResponder->isStdHeaderRequired())
         {
             // Send standard headers
-            sendStandardHeaders();
+            if (!sendStandardHeaders())
+                return false;
 
             // Done headers
             _isStdHeaderRequired = false;
         }
 
         // Send
-        rawSendOnConn((const uint8_t*)pSendBuffer, respSize);
+        return rawSendOnConn((const uint8_t*)pSendBuffer, respSize);
     }
+    return true;
 }

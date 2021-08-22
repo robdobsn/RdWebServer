@@ -71,7 +71,8 @@ void RdWebResponderWS::service()
         LOG_W(MODULE_PREFIX, "service sendMsg len %d", frame.getLen());
 #endif
         // Send
-        _webSocketLink.sendMsg(WEBSOCKET_OPCODE_BINARY, frame.getData(), frame.getLen());
+        if (!_webSocketLink.sendMsg(WEBSOCKET_OPCODE_BINARY, frame.getData(), frame.getLen()))
+            _isActive = false;
     }
 }
 
