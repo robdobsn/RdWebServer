@@ -137,7 +137,7 @@ bool RdWebResponderWS::startResponding(RdWebConnection& request)
 // Get response next
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-uint32_t RdWebResponderWS::getResponseNext(uint8_t* pBuf, uint32_t bufMaxLen)
+uint32_t RdWebResponderWS::getResponseNext(uint8_t*& pBuf, uint32_t bufMaxLen)
 {
     // Get from the WSLink
     uint32_t respLen = _webSocketLink.getTxData(pBuf, bufMaxLen);
@@ -177,11 +177,11 @@ bool RdWebResponderWS::sendFrame(const uint8_t* pBuf, uint32_t bufLen)
 {
     // Add to queue - don't block if full
     RdWebDataFrame frame(pBuf, bufLen);
-    bool putRslt = _txQueue.put(frame);
+    bool putRslt = _txQueue.put(frame, MAX_WAIT_FOR_TX_QUEUE_MS);
     if (!putRslt)
     {
 #ifdef WARN_WS_SEND_APP_DATA_FAIL
-        LOG_W(MODULE_PREFIX, "sendFrame failed len %d", bufLen);
+        LOG_W(MODULE_PREFIX, "sendFrame add to txQueue failed len %d count %d maxLen %d", bufLen, _txQueue.count(), _txQueue.maxLen());
 #endif
     }
     else

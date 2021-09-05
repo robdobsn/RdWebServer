@@ -11,14 +11,17 @@
 #include <FileStreamBlock.h>
 #include <APISourceInfo.h>
 
-static const char *MODULE_PREFIX = "RdWebRespREST";
-
 // #define DEBUG_RESPONDER_REST_API
 // #define DEBUG_RESPONDER_REST_API_NON_MULTIPART_DATA
 // #define DEBUG_RESPONDER_REST_API_MULTIPART_DATA
 // #define DEBUG_MULTIPART_EVENTS
 // #define DEBUG_MULTIPART_HEADERS
 // #define DEBUG_MULTIPART_DATA
+// #define DEBUG_RESPONDER_API_START_END
+
+#if defined(DEBUG_RESPONDER_REST_API) || defined(DEBUG_RESPONDER_REST_API_NON_MULTIPART_DATA) || defined(DEBUG_RESPONDER_REST_API_MULTIPART_DATA) || defined(DEBUG_MULTIPART_EVENTS) || defined(DEBUG_RESPONDER_REST_API) || defined(DEBUG_MULTIPART_DATA) || defined(DEBUG_RESPONDER_API_START_END)
+static const char *MODULE_PREFIX = "RdWebRespREST";
+#endif
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Constructor / Destructor
@@ -33,6 +36,8 @@ RdWebResponderRestAPI::RdWebResponderRestAPI(const RdWebServerRestEndpoint& endp
     _endpointCalled = false;
     _requestStr = reqStr;
     _headerExtract = headerExtract;
+    _respStrPos = 0;
+    _sendStartMs = millis();
 #ifdef APPLY_MIN_GAP_BETWEEN_API_CALLS_MS    
     _lastFileReqMs = 0;
 #endif
@@ -104,6 +109,8 @@ bool RdWebResponderRestAPI::startResponding(RdWebConnection& request)
     _isActive = true;
     _endpointCalled = false;
     _numBytesReceived = 0;
+    _respStrPos = 0;
+    _sendStartMs = millis();
 
 #ifdef DEBUG_RESPONDER_REST_API
     LOG_I(MODULE_PREFIX, "startResponding isActive %d", _isActive);
@@ -115,7 +122,7 @@ bool RdWebResponderRestAPI::startResponding(RdWebConnection& request)
 // Get response next
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-uint32_t RdWebResponderRestAPI::getResponseNext(uint8_t* pBuf, uint32_t bufMaxLen)
+uint32_t RdWebResponderRestAPI::getResponseNext(uint8_t*& pBuf, uint32_t bufMaxLen)
 {
     // Check if all data received
     if (_numBytesReceived != _headerExtract.contentLength)
@@ -137,57 +144,50 @@ uint32_t RdWebResponderRestAPI::getResponseNext(uint8_t* pBuf, uint32_t bufMaxLe
     if (!_endpointCalled)
     {
         // Call endpoint
-        String retStr;
         if (_endpoint.restApiFn)
-            _endpoint.restApiFn(_requestStr, retStr, _apiSourceInfo);
+            _endpoint.restApiFn(_requestStr, _respStr, _apiSourceInfo);
 
         // Check how much of buffer to send
-        respLen = bufMaxLen > retStr.length() ? retStr.length() : bufMaxLen;
-        if (respLen < retStr.length())
-        {
-            _respStr = retStr.substring(respLen);
-            LOG_I(MODULE_PREFIX, "getResponseNext API response too long %d sending first part %d URL %s",
-                        retStr.length(), respLen, _requestStr.c_str());
-        }
-        else
-        {
-            // Done response
-            _isActive = false;
-        }
+        respLen = bufMaxLen > _respStr.length() ? _respStr.length() : bufMaxLen;
 
-        // Copy response
-        memcpy(pBuf, retStr.c_str(), respLen);
+#ifdef DEBUG_RESPONDER_API_START_END
+        if (respLen < _respStr.length())
+        {
+            LOG_I(MODULE_PREFIX, "getResponseNext API response too long %d sending first part %d URL %s",
+                        _respStr.length(), respLen, _requestStr.c_str());
+        }
+#endif
+
+        // Prep buffer to respond with
+        pBuf = (uint8_t*) _respStr.c_str();
+        _respStrPos = 0;
 
         // Endpoint done
         _endpointCalled = true;
     }
-    else if (_endpointCalled)
-    {
-        // Check how much of buffer to send
-        respLen = bufMaxLen > _respStr.length() ? _respStr.length() : bufMaxLen;
-        if (respLen < _respStr.length())
-        {
-            // Copy response
-            memcpy(pBuf, _respStr.c_str(), respLen);
-
-            // Remove sent data from _respStr
-            _respStr = _respStr.substring(respLen);
-            LOG_I(MODULE_PREFIX, "getResponseNext API next chunk len %d URL %s",
-                        respLen, _requestStr.c_str());
-        }
-        else
-        {
-            // Copy response
-            memcpy(pBuf, _respStr.c_str(), respLen);
-            // Done response
-            _isActive = false;
-            _respStr.clear();
-        }
-    }
     else
     {
-        // Done response
+        // Check how much of buffer to send
+        uint32_t respRemain = _respStr.length() - _respStrPos;
+        respLen = bufMaxLen > respRemain ? respRemain : bufMaxLen;
+
+        // Prep buffer
+        pBuf = (uint8_t*) (_respStr.c_str() + _respStrPos);
+
+#ifdef DEBUG_RESPONDER_API_START_END
+        LOG_I(MODULE_PREFIX, "getResponseNext API next chunk sending len %d URL %s",
+                    respLen, _requestStr.c_str());
+#endif
+    }
+
+    // Update position
+    _respStrPos += respLen;
+    if (_respStrPos >= _respStr.length())
+    {
         _isActive = false;
+#ifdef DEBUG_RESPONDER_API_START_END
+        LOG_I(MODULE_PREFIX, "getResponseNext endOfFile sent final chunk ok");
+#endif
     }
 
 #ifdef DEBUG_RESPONDER_REST_API

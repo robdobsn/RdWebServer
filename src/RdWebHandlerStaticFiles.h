@@ -49,7 +49,6 @@ private:
     bool _gzipStats;
 
     // Helpers
-    bool urlFileExists(const RdWebRequestHeader& header, String& filePath);
     String getFilePath(const RdWebRequestHeader& header, bool defaultPath);
 
 };

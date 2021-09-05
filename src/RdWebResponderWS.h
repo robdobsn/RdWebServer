@@ -42,7 +42,7 @@ public:
     virtual bool startResponding(RdWebConnection& request) override final;
 
     // Get response next
-    virtual uint32_t getResponseNext(uint8_t* pBuf, uint32_t bufMaxLen) override final;
+    virtual uint32_t getResponseNext(uint8_t*& pBuf, uint32_t bufMaxLen) override final;
 
     // Get content type
     virtual const char* getContentType() override final;
@@ -100,6 +100,7 @@ private:
     // Queue for sending frames over the web socket
     static const uint32_t WEB_SOCKET_TX_QUEUE_SIZE = 10;
     ThreadSafeQueue<RdWebDataFrame> _txQueue;
+    static const uint32_t MAX_WAIT_FOR_TX_QUEUE_MS = 2;
 
     // Callback on websocket activity
     void webSocketCallback(RdWebSocketEventCode eventCode, const uint8_t* pBuf, uint32_t bufLen);

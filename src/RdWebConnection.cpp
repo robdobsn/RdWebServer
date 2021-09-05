@@ -40,6 +40,7 @@ static const char *MODULE_PREFIX = "RdWebConn";
 // #define DEBUG_WEB_CONN_OPEN_CLOSE
 // #define DEBUG_WEB_CONN_SERVICE_TIME_THRESH_MS 50
 // #define DEBUG_WEB_RESPONDER_HDL_DATA_TIME_THRESH_MS 50
+// #define DEBUG_WEB_RESPONDER_HDL_CHUNK_THRESH_MS 50
 
 #ifdef DEBUG_TRACE_HEAP_USAGE_WEB_CONN
 #include "esp_heap_trace.h"
@@ -113,7 +114,7 @@ bool RdWebConnection::setNewConn(RdClientConnBase* pClientConn, RdWebConnManager
     _maxSendBufferBytes = maxSendBufferBytes;
 
     // Set non-blocking connection
-    _pClientConn->setup(false);
+    _pClientConn->setup(USE_BLOCKING_WEB_CONNECTIONS);
 
     // Debug
 #ifdef DEBUG_WEB_CONN_OPEN_CLOSE
@@ -160,10 +161,22 @@ void RdWebConnection::clear()
     _timeoutDurationMs = MAX_STD_CONN_DURATION_MS;
     _timeoutOnIdleDurationMs = MAX_CONN_IDLE_DURATION_MS;
     _timeoutActive = false;
+    _isClearPending = false;
+    _clearPendingStartMs = 0;
     _parseHeaderStr = "";
     _debugDataRxCount = 0;
     _maxSendBufferBytes = 0;
     _header.clear();
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Set flags to indicate clear is pending
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void RdWebConnection::clearAfterSendCompletion()
+{
+    _isClearPending = true;
+    _clearPendingStartMs = millis();
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -235,6 +248,23 @@ void RdWebConnection::service()
     if (!_pClientConn)
         return;
 
+    // Handle any queued data
+    handleTxQueuedData();
+
+    // Check clear
+    if (_isClearPending)
+    {
+        // Check for timeout
+        if (Utils::isTimeout(millis(), _clearPendingStartMs, CONNECTION_CLEAR_PENDING_TIME_MS))
+        {
+#ifdef DEBUG_WEB_CONN_SERVICE_TIME_THRESH_MS
+            LOG_I(MODULE_PREFIX, "service conn cleared - clear was pending");
+#endif
+            clear();
+        }
+        return;
+    }
+
     // Check timeout
     if (_timeoutActive && (Utils::isTimeout(millis(), _timeoutStartMs, _timeoutDurationMs) ||
                     Utils::isTimeout(millis(), _timeoutLastActivityMs, _timeoutOnIdleDurationMs)))
@@ -273,13 +303,14 @@ void RdWebConnection::service()
     bool closeRequired = false;
     uint8_t* pData = nullptr;
     bool dataAvailable = false;
+    bool errorOccurred = false;
     if (checkForNewData)
     {
 #ifdef DEBUG_WEB_CONN_SERVICE_TIME_THRESH_MS
         uint32_t getDataStartMs = millis();
 #endif
 
-        pData = _pClientConn->getDataStart(dataLen, closeRequired);
+        pData = _pClientConn->getDataStart(dataLen, errorOccurred, closeRequired);
         dataAvailable = (pData != nullptr) && (dataLen != 0);
 
 #ifdef DEBUG_WEB_CONN_SERVICE_TIME_THRESH_MS
@@ -308,7 +339,6 @@ void RdWebConnection::service()
 
     // See if we are forming the header
     uint32_t bufPos = 0;
-    bool errorOccurred = false;
     if (dataAvailable && !_header.isComplete)
     {
 #ifdef DEBUG_WEB_CONN_SERVICE_TIME_THRESH_MS
@@ -347,7 +377,7 @@ void RdWebConnection::service()
 #endif
     }
 
-    // Data all handled if acquired
+    // If new data checking then end the data access
     if (checkForNewData)
     {
 #ifdef DEBUG_WEB_CONN_SERVICE_TIME_THRESH_MS
@@ -359,17 +389,33 @@ void RdWebConnection::service()
 #endif
     }
 
-    // Check for close
-    if (errorOccurred || closeRequired)
+    // Check for error
+    if (errorOccurred)
     {
 #ifdef DEBUG_WEB_CONN_OPEN_CLOSE
-        LOG_I(MODULE_PREFIX, "service conn closing cause %s connId %d", 
-                errorOccurred ? "ErrorOccurred" : "CloseRequired", 
+        LOG_I(MODULE_PREFIX, "service conn closing ErrorOccurred connId %d", 
                 _pClientConn->getClientId());
 #endif
 
         // This closes any connection and clears status ready for a new one
         clear();
+
+#ifdef DEBUG_TRACE_HEAP_USAGE_WEB_CONN
+        heap_trace_stop();
+        heap_trace_dump();
+#endif
+    }
+
+    // Check for close required
+    else if (closeRequired)
+    {
+#ifdef DEBUG_WEB_CONN_OPEN_CLOSE
+        LOG_I(MODULE_PREFIX, "service conn closeRequired connId %d", 
+                _pClientConn->getClientId());
+#endif
+
+        // Clear connection after send completion
+        clearAfterSendCompletion();
 
 #ifdef DEBUG_TRACE_HEAP_USAGE_WEB_CONN
         heap_trace_stop();
@@ -417,16 +463,34 @@ bool RdWebConnection::serviceConnHeader(const uint8_t* pRxData, uint32_t dataLen
 #endif
 
     // Handle data for header
+#ifdef DEBUG_WEB_REQUEST_HEADERS
+    uint64_t hhStUs = micros();
+#endif
     bool headerOk = handleHeaderData(pRxData, dataLen, curBufPos);
+#ifdef DEBUG_WEB_REQUEST_HEADERS
+    uint64_t hhEnUs = micros();
+#endif
     if (!headerOk)
     {
+#ifdef DEBUG_WEB_REQUEST_HEADERS
+        uint64_t srStUs = micros();
+#endif
         setHTTPResponseStatus(HTTP_STATUS_BADREQUEST);
+#ifdef DEBUG_WEB_REQUEST_HEADERS
+        uint64_t srEnUs = micros();
+        LOG_I(MODULE_PREFIX, "serviceConnHeader badResponse hh %lld sr %lld", hhEnUs-hhStUs, srEnUs-srStUs);
+#endif
         return false;
     }
 
     // Check if header if now complete
     if (!_header.isComplete)
+    {
+#ifdef DEBUG_WEB_REQUEST_HEADERS
+        LOG_I(MODULE_PREFIX, "serviceConnHeader incomplete hh %lld", hhEnUs-hhStUs);
+#endif
         return true;
+    }
 
     // Debug
 #ifdef DEBUG_WEB_REQUEST_HEADERS
@@ -449,22 +513,32 @@ bool RdWebConnection::serviceConnHeader(const uint8_t* pRxData, uint32_t dataLen
         _pResponder = nullptr;
     }
 
+    // Debug
+#ifdef DEBUG_WEB_REQUEST_HEADERS
+    uint64_t gpStUs = micros();
+#endif
+
     // Get a responder (we are responsible for deletion)
     RdWebRequestParams params(_maxSendBufferBytes, _pConnManager->getStdResponseHeaders(), 
-                std::bind(&RdWebConnection::rawSendOnConn, this, std::placeholders::_1, std::placeholders::_2));
+                std::bind(&RdWebConnection::rawSendOnConn, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
     _pResponder = _pConnManager->getNewResponder(_header, params, statusCode);
 #ifdef DEBUG_RESPONDER_CREATE_DELETE
     if (_pResponder) 
     {
         uint32_t channelID = 0;
         bool chanIdOk = _pResponder->getProtocolChannelID(channelID);
-        LOG_I(MODULE_PREFIX, "New Responder created type %s chanID %d%s responder %d", _pResponder->getResponderType(), 
+        LOG_I(MODULE_PREFIX, "serviceConnHeader new responder type %s chanID %d%s responder %d", _pResponder->getResponderType(), 
                             channelID, chanIdOk ? "" : " (INVALID)", (uint32_t)_pResponder);
     } 
     else 
     {
-        LOG_W(MODULE_PREFIX, "Failed to create responder URI %s HTTP resp %d", _header.URIAndParams.c_str(), statusCode);
+        LOG_W(MODULE_PREFIX, "serviceConnHeader failed create responder URI %s HTTP resp %d", _header.URIAndParams.c_str(), statusCode);
     }
+#endif
+
+#ifdef DEBUG_WEB_REQUEST_HEADERS
+    uint64_t gpEnUs = micros();
+    uint64_t ssStUs = micros();
 #endif
 
     // Check we got a responder
@@ -481,6 +555,11 @@ bool RdWebConnection::serviceConnHeader(const uint8_t* pRxData, uint32_t dataLen
         // Start responder
         _pResponder->startResponding(*this);
     }
+
+#ifdef DEBUG_WEB_REQUEST_HEADERS
+    uint64_t ssEnUs = micros();
+    LOG_I(MODULE_PREFIX, "serviceConnHeader ok handleHeaders %lldus getResponder %lldus startResponding %lldus", hhEnUs-hhStUs, gpEnUs-gpStUs, ssEnUs-ssStUs);
+#endif
 
     // Ok
     return true;
@@ -528,18 +607,8 @@ bool RdWebConnection::responderHandleData(const uint8_t* pRxData, uint32_t dataL
 #ifdef DEBUG_WEB_RESPONDER_HDL_DATA_TIME_THRESH_MS
         uint32_t debugHandleRespStartMs = millis();
 #endif
-        // Get next chunk of response
-        if (_maxSendBufferBytes > MAX_BUFFER_ALLOCATED_ON_STACK)
-        {
-            uint8_t* pSendBuffer = new uint8_t[_maxSendBufferBytes];
-            errorOccurred = !handleResponseWithBuffer(pSendBuffer);
-            delete [] pSendBuffer;
-        }
-        else
-        {
-            uint8_t pSendBuffer[_maxSendBufferBytes];
-            errorOccurred = !handleResponseWithBuffer(pSendBuffer);
-        }
+        // Handle next chunk of response
+        errorOccurred = !handleResponseChunk();
 
         // Record time of activity for timeouts
         _timeoutLastActivityMs = millis();
@@ -569,9 +638,10 @@ bool RdWebConnection::responderHandleData(const uint8_t* pRxData, uint32_t dataL
 
     // Debug
 #ifdef DEBUG_RESPONDER_PROGRESS_DETAIL
-    LOG_I(MODULE_PREFIX, "serviceResponse responder %s isActive %s connId %d", 
+    LOG_I(MODULE_PREFIX, "responderHandleData responder %s isActive %s errorOccurred %s connId %d", 
                 _pResponder ? "YES" : "NO", 
                 (_pResponder && _pResponder->isActive()) ? "YES" : "NO", 
+                errorOccurred ? "YES" : "NO", 
                 _pClientConn->getClientId());
 #endif
 
@@ -685,7 +755,7 @@ bool RdWebConnection::parseHeaderLine(const String& line)
         if (_header.isContinue)
         {
             const char *response = "HTTP/1.1 100 Continue\r\n\r\n";
-            if (!rawSendOnConn((const uint8_t*) response, strlen(response)))
+            if (rawSendOnConn((const uint8_t*) response, strlen(response), MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
                 return false;
         }
 
@@ -877,23 +947,70 @@ void RdWebConnection::setHTTPResponseStatus(RdHttpStatusCode responseCode)
 // Raw send on connection
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool RdWebConnection::rawSendOnConn(const uint8_t* pBuf, uint32_t bufLen)
+RdWebConnSendRetVal RdWebConnection::rawSendOnConn(const uint8_t* pBuf, uint32_t bufLen, uint32_t maxRetryMs)
 {
     // Check connection
     if (!_pClientConn)
     {
         LOG_W(MODULE_PREFIX, "rawSendOnConn conn is nullptr");
-        return false;
+        return RdWebConnSendRetVal::WEB_CONN_SEND_FAIL;
+    }
+
+    // Check buffer
+    if (!pBuf)
+    {
+        LOG_W(MODULE_PREFIX, "rawSendOnConn pBuf is nullptr");
+        return RdWebConnSendRetVal::WEB_CONN_SEND_FAIL;
     }
 
 #ifdef DEBUG_WEB_CONNECTION_DATA_PACKETS_CONTENTS
     String debugStr;
     Utils::getHexStrFromBytes(pBuf, bufLen, debugStr);
-    LOG_I(MODULE_PREFIX, "connId %d TX: %s", _pClientConn->getClientId(), debugStr.c_str());
+    LOG_I(MODULE_PREFIX, "rawSendOnConn connId %d TX: %s", _pClientConn->getClientId(), debugStr.c_str());
 #endif
 
-    // Send
-    return _pClientConn->write(pBuf, bufLen);
+    // Handle any data waiting to be written
+    if (!handleTxQueuedData())
+    {
+#ifdef DEBUG_WEB_CONNECTION_DATA_PACKETS
+        LOG_I(MODULE_PREFIX, "rawSendOnConn connId %d failed handleTxQueueData", _pClientConn->getClientId());
+#endif
+        return RdWebConnSendRetVal::WEB_CONN_SEND_FAIL;
+    }
+
+    // Check if data can be sent immediately
+    if (_socketTxQueuedBuffer.size() == 0)
+    {
+        // Queue is currently empty so try to send
+        RdWebConnSendRetVal retVal = _pClientConn->write(pBuf, bufLen, maxRetryMs);
+#ifdef DEBUG_WEB_CONNECTION_DATA_PACKETS
+        LOG_I(MODULE_PREFIX, "rawSendOnConn connId %d send len %d result %s", _pClientConn->getClientId(), bufLen, RdWebConnDefs::getSendRetValStr(retVal));
+#endif
+        if (retVal != RdWebConnSendRetVal::WEB_CONN_SEND_EAGAIN)
+            return retVal;
+    }
+
+    // Check queue max size
+    uint32_t curSize = _socketTxQueuedBuffer.size();
+    if (curSize + bufLen > _maxSendBufferBytes)
+    {
+#ifdef DEBUG_WEB_CONNECTION_DATA_PACKETS
+        LOG_I(MODULE_PREFIX, "rawSendOnConn connId %d send buffer overflow was %d trying to add %d max %d", 
+                    _pClientConn->getClientId(), curSize, bufLen, _maxSendBufferBytes);
+#endif
+        return RdWebConnSendRetVal::WEB_CONN_SEND_FAIL;
+    }
+
+    // Append to buffer
+    _socketTxQueuedBuffer.resize(_socketTxQueuedBuffer.size() + bufLen);
+    memcpy(_socketTxQueuedBuffer.data() + curSize, pBuf, bufLen);
+
+#ifdef DEBUG_WEB_CONNECTION_DATA_PACKETS
+    LOG_I(MODULE_PREFIX, "rawSendOnConn connId %d data added %d to send buffer newLen %d", _pClientConn->getClientId(), bufLen, _socketTxQueuedBuffer.size());
+#endif
+
+    // Ok - the data will be sent later
+    return RdWebConnSendRetVal::WEB_CONN_SEND_EAGAIN;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -906,7 +1023,7 @@ bool RdWebConnection::sendStandardHeaders()
     char respLine[100];
     snprintf(respLine, sizeof(respLine), "HTTP/1.1 %d %s\r\n", _httpResponseStatus, 
                 RdWebInterface::getHTTPStatusStr(_httpResponseStatus));
-    if (!rawSendOnConn((const uint8_t*)respLine, strlen(respLine)))
+    if (rawSendOnConn((const uint8_t*)respLine, strlen(respLine), MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
         return false;
 
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
@@ -918,7 +1035,7 @@ bool RdWebConnection::sendStandardHeaders()
     if (_pResponder && _pResponder->getContentType())
     {
         snprintf(respLine, sizeof(respLine), "Content-Type: %s\r\n", _pResponder->getContentType());
-        if (!rawSendOnConn((const uint8_t*)respLine, strlen(respLine)))
+        if (rawSendOnConn((const uint8_t*)respLine, strlen(respLine), MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
             return false;
 
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
@@ -927,19 +1044,36 @@ bool RdWebConnection::sendStandardHeaders()
 #endif
     }
 
-    // Send other headers
+    // Send standard headers
     if (_pConnManager)
     {
         std::list<RdJson::NameValuePair>* pRespHeaders = _pConnManager->getStdResponseHeaders();
         for (RdJson::NameValuePair& nvPair : *pRespHeaders)
         {
             snprintf(respLine, sizeof(respLine), "%s: %s\r\n", nvPair.name.c_str(), nvPair.value.c_str());
-            if (!rawSendOnConn((const uint8_t*)respLine, strlen(respLine)))
+            if (rawSendOnConn((const uint8_t*)respLine, strlen(respLine), MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
                 return false;
 
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
             // Debug
             LOG_I(MODULE_PREFIX, "sendStandardHeaders sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
+#endif
+        }
+    }
+
+    // Send additional headers
+    if (_pResponder)
+    {
+        std::list<RdJson::NameValuePair>* pRespHeaders = _pResponder->getHeaders();
+        for (RdJson::NameValuePair& nvPair : *pRespHeaders)
+        {
+            snprintf(respLine, sizeof(respLine), "%s: %s\r\n", nvPair.name.c_str(), nvPair.value.c_str());
+            if (rawSendOnConn((const uint8_t*)respLine, strlen(respLine), MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
+                return false;
+
+#ifdef DEBUG_RESPONDER_HEADER_DETAIL
+            // Debug
+            LOG_I(MODULE_PREFIX, "sendAdditionalHeaders sent %s clientId %d", respLine, _pClientConn ? _pClientConn->getClientId() : 0);
 #endif
         }
     }
@@ -951,7 +1085,7 @@ bool RdWebConnection::sendStandardHeaders()
         if (contentLength >= 0)
         {
             snprintf(respLine, sizeof(respLine), "Content-Length: %d\r\n", contentLength);
-            if (!rawSendOnConn((const uint8_t*)respLine, strlen(respLine)))
+            if (rawSendOnConn((const uint8_t*)respLine, strlen(respLine), MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
                 return false;
 
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
@@ -965,7 +1099,7 @@ bool RdWebConnection::sendStandardHeaders()
     if (!_pResponder || !_pResponder->leaveConnOpen())
     {
         snprintf(respLine, sizeof(respLine), "Connection: close\r\n");
-        if (!rawSendOnConn((const uint8_t*)respLine, strlen(respLine)))
+        if (rawSendOnConn((const uint8_t*)respLine, strlen(respLine), MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
             return false;
 
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
@@ -975,38 +1109,110 @@ bool RdWebConnection::sendStandardHeaders()
     }
 
     // Send end of header line
-    return rawSendOnConn((const uint8_t*)"\r\n", 2);
+    return rawSendOnConn((const uint8_t*)"\r\n", 2, MAX_HEADER_SEND_RETRY_MS) == RdWebConnSendRetVal::WEB_CONN_SEND_OK;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Handle response with buffer provided
+// Handle next chunk of response
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool RdWebConnection::handleResponseWithBuffer(uint8_t* pSendBuffer)
+bool RdWebConnection::handleResponseChunk()
 {
-    uint32_t respSize = _pResponder->getResponseNext(pSendBuffer, _maxSendBufferBytes);
-
-    // Check valid
-    if (respSize != 0)
-    {
-        // Debug
-#ifdef DEBUG_RESPONDER_CONTENT_DETAIL
-        LOG_I(MODULE_PREFIX, "handleResponseWithBuffer writing %d clientId %d", respSize, _pClientConn ? _pClientConn->getClientId() : 0);
+#ifdef DEBUG_WEB_RESPONDER_HDL_CHUNK_THRESH_MS
+    uint32_t debugHdlRespChunkStartMs = millis();
+    uint32_t debugTimingStartMs = millis();
+    uint32_t debugSendHdrsMs = 0;
+    uint32_t debugGetRespNextMs = 0;
+    uint32_t debugRawSendOnConnMs = 0;
 #endif
 
-        // Check if standard reponse to be sent first
-        if (_isStdHeaderRequired && _pResponder->isStdHeaderRequired())
+    // Check if standard reponse to be sent first
+    if (_isStdHeaderRequired && _pResponder->isStdHeaderRequired())
+    {
+        // Send standard headers
+        if (!sendStandardHeaders())
         {
-            // Send standard headers
-            if (!sendStandardHeaders())
-                return false;
-
-            // Done headers
-            _isStdHeaderRequired = false;
+        // Debug
+#ifdef DEBUG_RESPONDER_CONTENT_DETAIL
+            LOG_I(MODULE_PREFIX, "handleResponseChunk sendStandardHeaders failed clientId %d", _pClientConn ? _pClientConn->getClientId() : 0);
+#endif
+            return false;
         }
 
-        // Send
-        return rawSendOnConn((const uint8_t*)pSendBuffer, respSize);
+        // Done headers
+        _isStdHeaderRequired = false;
+    }
+
+#ifdef DEBUG_WEB_RESPONDER_HDL_CHUNK_THRESH_MS
+    debugSendHdrsMs = millis() - debugTimingStartMs;
+    debugTimingStartMs = millis();
+#endif
+
+    // Check if data waiting to be sent
+    if (_socketTxQueuedBuffer.size() == 0)
+    {
+        // Get next chunk of response
+        uint8_t* pRespBuffer = nullptr;
+        uint32_t respSize = _pResponder->getResponseNext(pRespBuffer, _maxSendBufferBytes);
+
+#ifdef DEBUG_WEB_RESPONDER_HDL_CHUNK_THRESH_MS
+        debugGetRespNextMs = millis() - debugTimingStartMs;
+        debugTimingStartMs = millis();
+#endif
+
+        // Check valid
+        if (respSize != 0)
+        {
+            // Send
+            RdWebConnSendRetVal retVal = rawSendOnConn((const uint8_t*)pRespBuffer, respSize, MAX_CONTENT_SEND_RETRY_MS);
+
+            // Debug
+#ifdef DEBUG_RESPONDER_CONTENT_DETAIL
+            LOG_I(MODULE_PREFIX, "handleResponseChunk writing %d retVal %s clientId %d", 
+                        respSize, RdWebConnDefs::getSendRetValStr(retVal), _pClientConn ? _pClientConn->getClientId() : 0);
+#endif
+
+            // Handle failure
+            if (retVal == RdWebConnSendRetVal::WEB_CONN_SEND_FAIL)
+                return false;
+        }
+    }
+
+#ifdef DEBUG_WEB_RESPONDER_HDL_CHUNK_THRESH_MS
+    if (millis() - debugHdlRespChunkStartMs > DEBUG_WEB_RESPONDER_HDL_CHUNK_THRESH_MS)
+    {
+        debugRawSendOnConnMs = millis() - debugTimingStartMs;
+        LOG_I(MODULE_PREFIX, "handleResponseChunk timing sendHeaders %dms getRespNext %dms sendOnConn %dms clientId %d respType %s", 
+                debugSendHdrsMs, debugGetRespNextMs, debugRawSendOnConnMs, 
+                _pClientConn ? _pClientConn->getClientId() : 0,
+                _pResponder ? _pResponder->getResponderType() : "");
+    }
+#endif
+
+    return true;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Handle sending queued data
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+bool RdWebConnection::handleTxQueuedData()
+{
+    // Check if data in the queue to send
+    if (_socketTxQueuedBuffer.size() > 0)
+    {
+        // Try to send
+        RdWebConnSendRetVal retVal = _pClientConn->write(_socketTxQueuedBuffer.data(), _socketTxQueuedBuffer.size(), MAX_CONTENT_SEND_RETRY_MS);
+#ifdef DEBUG_WEB_CONNECTION_DATA_PACKETS
+        LOG_I(MODULE_PREFIX, "handleTxQueuedData connId %d result %s", _pClientConn->getClientId(), RdWebConnDefs::getSendRetValStr(retVal));
+#endif
+        if (retVal == RdWebConnSendRetVal::WEB_CONN_SEND_FAIL)
+            return false;
+        else if (retVal == RdWebConnSendRetVal::WEB_CONN_SEND_EAGAIN)
+            return true;
+        
+        // Sent ok so clear queue
+        _socketTxQueuedBuffer.clear();
     }
     return true;
 }

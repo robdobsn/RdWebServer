@@ -28,6 +28,7 @@ public:
         _curDataPos = 0;
         _dataLength = dataLen;
         _pData = pData;
+        _fileSendStartMs = millis();
     }
 
     virtual ~RdWebResponderData()
@@ -45,11 +46,12 @@ public:
     {
         _isActive = true;
         _curDataPos = 0;
+        _fileSendStartMs = millis();
         return _isActive;
     }
 
     // Get response next
-    virtual uint32_t getResponseNext(uint8_t* pBuf, uint32_t bufMaxLen) override final
+    virtual uint32_t getResponseNext(uint8_t*& pBuf, uint32_t bufMaxLen) override final
     {
         uint32_t lenToCopy = _dataLength - _curDataPos;
         if (lenToCopy > bufMaxLen)
@@ -66,14 +68,15 @@ public:
         LOG_I("WebRespData", "getResponseNext pos %d totalLen %d lenToCopy %d isActive %d ptr %x", 
                     _curDataPos, _dataLength, lenToCopy, _isActive, _pData);
 #endif
-        memcpy_P(pBuf, _pData+_curDataPos, lenToCopy);
-        _curDataPos += lenToCopy;
+        pBuf = _pData + _curDataPos;
+        _curDataPos += dataLenSent;
         if (_curDataPos >= _dataLength)
         {
             _isActive = false;
         }
+
 #ifdef DEBUG_STATIC_DATA_RESPONDER
-        LOG_I("WebRespData", "getResponseNext returning %d newCurPos %d isActive %d", 
+        LOG_I("WebRespData", "getResponseNext returning %d curPos %d isActive %d", 
                     lenToCopy, _curDataPos, _isActive);
 #endif
         return lenToCopy;
@@ -110,4 +113,6 @@ private:
     uint32_t _dataLength;
     uint32_t _curDataPos;
     String _mimeType;
+    uint32_t _fileSendStartMs;
+    static const uint32_t SEND_DATA_OVERALL_TIMEOUT_MS = 5 * 60 * 1000;
 };

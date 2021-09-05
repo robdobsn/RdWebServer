@@ -11,6 +11,7 @@
 #include <list>
 #include <WString.h>
 #include <RdJson.h>
+#include <RdWebConnDefs.h>
 
 class RdWebConnection;
 
@@ -46,7 +47,7 @@ public:
     }
 
     // Get response next
-    virtual uint32_t getResponseNext(uint8_t* pBuf, uint32_t bufMaxLen)
+    virtual uint32_t getResponseNext(uint8_t*& pBuf, uint32_t bufMaxLen)
     {
         return 0;
     }
@@ -55,6 +56,12 @@ public:
     void addHeader(String name, String value)
     {
         _headers.push_back({name, value});
+    }
+
+    // Get headers
+    std::list<RdJson::NameValuePair>* getHeaders()
+    {
+        return &_headers;
     }
 
     // Get content type

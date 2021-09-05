@@ -18,11 +18,13 @@
 #include "FileSystemChunker.h"
 
 class RdWebHandler;
+class RdWebRequestHeader;
 
 class RdWebResponderFile : public RdWebResponder
 {
 public:
-    RdWebResponderFile(const String& filePath, RdWebHandler* pWebHandler, const RdWebRequestParams& params);
+    RdWebResponderFile(const String& filePath, RdWebHandler* pWebHandler, const RdWebRequestParams& params,
+                    const RdWebRequestHeader& requestHeader);
     virtual ~RdWebResponderFile();
 
     // Handle inbound data
@@ -32,7 +34,7 @@ public:
     virtual bool startResponding(RdWebConnection& request) override final;
 
     // Get response next
-    virtual uint32_t getResponseNext(uint8_t* pBuf, uint32_t bufMaxLen) override final;
+    virtual uint32_t getResponseNext(uint8_t*& pBuf, uint32_t bufMaxLen) override final;
 
     // Get content type
     virtual const char* getContentType() override final;
@@ -61,6 +63,10 @@ private:
     FileSystemChunker _fileChunker;
     RdWebRequestParams _reqParams;
     uint32_t _fileLength;
+    uint32_t _fileSendStartMs;
+    std::vector<uint8_t> _lastChunkData;
+    static const uint32_t SEND_DATA_OVERALL_TIMEOUT_MS = 5 * 60 * 1000;
+    bool _isFinalChunk;
 };
 
 #endif

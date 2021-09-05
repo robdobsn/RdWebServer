@@ -58,19 +58,12 @@ public:
     }
 
 private:
-
-    // Max size of buffer permitted on the stack
-#ifndef ESP8266
-    static const uint32_t MAX_BUFFER_ALLOCATED_ON_STACK = 300;
-#else
-    static const uint32_t MAX_BUFFER_ALLOCATED_ON_STACK = 0;
-#endif
-
     // Connection manager
     RdWebConnManager* _pConnManager;
 
     // Client connection
     RdClientConnBase* _pClientConn;
+    static const bool USE_BLOCKING_WEB_CONNECTIONS = true;
 
     // Header parse info
     String _parseHeaderStr;
@@ -89,16 +82,26 @@ private:
     RdHttpStatusCode _httpResponseStatus;
 
     // Timeout timer
-    static const uint32_t MAX_STD_CONN_DURATION_MS = 3600000;
-    static const uint32_t MAX_CONN_IDLE_DURATION_MS = 60000;
+    static const uint32_t MAX_STD_CONN_DURATION_MS = 60 * 60 * 1000;
+    static const uint32_t MAX_CONN_IDLE_DURATION_MS = 60 * 1000;
+    static const uint32_t MAX_HEADER_SEND_RETRY_MS = 10;
+    static const uint32_t MAX_CONTENT_SEND_RETRY_MS = 0;
     uint32_t _timeoutStartMs;
     uint32_t _timeoutDurationMs;
     uint32_t _timeoutLastActivityMs;
     uint32_t _timeoutOnIdleDurationMs;
     bool _timeoutActive;
 
+    // Responder/connection clear pending
+    bool _isClearPending;
+    uint32_t _clearPendingStartMs;
+    static const uint32_t CONNECTION_CLEAR_PENDING_TIME_MS = 1000;
+
     // Max send buffer size
     uint32_t _maxSendBufferBytes;
+
+    // Queued data to send
+    std::vector<uint8_t> _socketTxQueuedBuffer;
 
     // Debug
     uint32_t _debugDataRxCount;
@@ -133,11 +136,17 @@ private:
     void setHTTPResponseStatus(RdHttpStatusCode reponseCode);
 
     // Raw send on connection - used by websockets, etc
-    bool rawSendOnConn(const uint8_t* pBuf, uint32_t bufLen);    
+    RdWebConnSendRetVal rawSendOnConn(const uint8_t* pBuf, uint32_t bufLen, uint32_t maxRetryMs);    
 
     // Send standard headers
     bool sendStandardHeaders();
 
-    // Handle response using buffer provided
-    bool handleResponseWithBuffer(uint8_t* pSendBuffer);
+    // Handle next chunk of response
+    bool handleResponseChunk();
+
+    // Handle sending queued data
+    bool handleTxQueuedData();
+
+    // Clear the responder and connection after send completion
+    void clearAfterSendCompletion();
 };

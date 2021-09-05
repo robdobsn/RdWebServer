@@ -9,6 +9,7 @@
 #pragma once
 
 #include "lwip/api.h"
+#include "RdWebConnDefs.h"
 
 class RdClientConnBase
 {
@@ -38,12 +39,12 @@ public:
     }
 
     // Write
-    virtual bool write(const uint8_t* pBuf, uint32_t bufLen);
+    virtual RdWebConnSendRetVal write(const uint8_t* pBuf, uint32_t bufLen, uint32_t maxRetryMs);
 
     // Setup
     virtual void setup(bool blocking);
 
     // Data access
-    virtual uint8_t* getDataStart(uint32_t& dataLen, bool& closeRequired);
+    virtual uint8_t* getDataStart(uint32_t& dataLen, bool& errorOccurred, bool& connClosed);
     virtual void getDataEnd();
 };

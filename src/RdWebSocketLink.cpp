@@ -23,6 +23,11 @@
 
 static const char *MODULE_PREFIX = "RdWSLink";
 
+// Warn
+#define WARN_WEBSOCKET_EXCESS_DATA_AFTER_UPGRADE
+#define WARN_WEBSOCKET_DATA_DISCARD_AS_EXCEEDS_MSG_SIZE
+
+// Debug
 // #define DEBUG_WEBSOCKET_LINK
 // #define DEBUG_WEBSOCKET_LINK_EVENTS
 // #define DEBUG_WEBSOCKET_PING_PONG
@@ -33,8 +38,6 @@ static const char *MODULE_PREFIX = "RdWSLink";
 // #define DEBUG_WEBSOCKET_DATA_BUFFERING
 // #define DEBUG_WEBSOCKET_DATA_BUFFERING_CONTENT
 // #define DEBUG_WEBSOCKET_DATA_PROCESSING
-#define WARN_WEBSOCKET_EXCESS_DATA_AFTER_UPGRADE
-#define WARN_WEBSOCKET_DATA_DISCARD_AS_EXCEEDS_MSG_SIZE
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Constructor / Destructor
@@ -225,7 +228,7 @@ void RdWebSocketLink::handleRxData(const uint8_t *pBuf, uint32_t bufLen)
 // Get data to tx
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-uint32_t RdWebSocketLink::getTxData(uint8_t *pBuf, uint32_t bufMaxLen)
+uint32_t RdWebSocketLink::getTxData(uint8_t*& pBuf, uint32_t bufMaxLen)
 {
     // Check if upgrade received but no response yet sent
     if (!_upgradeRespSent && _upgradeReqReceived)
@@ -237,10 +240,13 @@ uint32_t RdWebSocketLink::getTxData(uint8_t *pBuf, uint32_t bufMaxLen)
         _pingTimeLastMs = millis();
 
         // Form the upgrade response
-        return formUpgradeResponse(_wsKey, _wsVersion, pBuf, bufMaxLen);
+        _wsUpgradeResponse = formUpgradeResponse(_wsKey, _wsVersion, bufMaxLen);
+        pBuf = (uint8_t*)_wsUpgradeResponse.c_str();
+        return _wsUpgradeResponse.length();
     }
 
     // Other comms on the link is done through _rawConnSendFn
+    _wsUpgradeResponse.clear();
     return 0;
 }
 
@@ -327,42 +333,41 @@ bool RdWebSocketLink::sendMsg(WebSocketOpCodes opCode, const uint8_t *pBuf, uint
     }
 
     // Send
+    RdWebConnSendRetVal sendRetc = RdWebConnSendRetVal::WEB_CONN_SEND_FAIL;
     if (_rawConnSendFn)
-        return _rawConnSendFn(frameBuffer.data(), frameBuffer.size());
+        sendRetc = _rawConnSendFn(frameBuffer.data(), frameBuffer.size(), MAX_WS_SEND_RETRY_MS);
 
 #ifdef DEBUG_WEBSOCKET_SEND
-    LOG_I(MODULE_PREFIX, "WebSocket sendMsg send %d bytes", frameBuffer.size());
+    LOG_I(MODULE_PREFIX, "WebSocket sendMsg result %s send %d bytes", 
+            RdWebConnDefs::getSendRetValStr(sendRetc), 
+            frameBuffer.size());
 #endif
 
-    return false;
+    return sendRetc == RdWebConnSendRetVal::WEB_CONN_SEND_OK;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Form response to upgrade connection
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-uint32_t RdWebSocketLink::formUpgradeResponse(const String &wsKey, const String &wsVersion, uint8_t *pBuf, uint32_t bufMaxLen)
+String RdWebSocketLink::formUpgradeResponse(const String &wsKey, const String &wsVersion, uint32_t bufMaxLen)
 {
-    // Response for snprintf
-    const char WEBSOCKET_RESPONSE[] =
+    // Response with magic code
+    String respStr =
         "HTTP/1.1 101 Switching Protocols\r\n"
         "Upgrade: websocket\r\n"
         "Connection: Upgrade\r\n"
-        "Sec-WebSocket-Accept: %s\r\n\r\n";
-
-    // Calculate the response
-    String magicResp = genMagicResponse(wsKey, wsVersion);
-
-    // Reponse string
-    snprintf((char *)pBuf, bufMaxLen, WEBSOCKET_RESPONSE, magicResp.c_str());
+        "Sec-WebSocket-Accept: " +
+        genMagicResponse(wsKey, wsVersion) + 
+        "\r\n\r\n";
 
     // Debug
 #ifdef DEBUG_WEBSOCKET_LINK
-    LOG_I(MODULE_PREFIX, "formUpgradeResponse resp %s", (char *)pBuf);
+    LOG_I(MODULE_PREFIX, "formUpgradeResponse resp %s", respStr.c_str());
 #endif
 
     // Return
-    return strlen((char *)pBuf);
+    return respStr;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -436,7 +441,7 @@ uint32_t RdWebSocketLink::handleRxPacketData(const uint8_t *pBuf, uint32_t bufLe
             // Check we don't try to store too much
             if (curBufSize + copyLen > MAX_WS_MESSAGE_SIZE)
             {
-                LOG_W(MODULE_PREFIX, "handleRx msg > max %d", MAX_WS_MESSAGE_SIZE);
+                LOG_W(MODULE_PREFIX, "handleRxPacketData msg > max %d", MAX_WS_MESSAGE_SIZE);
                 _callbackData.clear();
                 _wsHeader.ignoreUntilFinal = true;
                 return _wsHeader.dataPos + _wsHeader.len;             
@@ -463,7 +468,7 @@ uint32_t RdWebSocketLink::handleRxPacketData(const uint8_t *pBuf, uint32_t bufLe
         {
             callbackEventCode = WEBSOCKET_EVENT_PONG;
 #ifdef DEBUG_WEBSOCKET_PING_PONG
-            LOG_I(MODULE_PREFIX, "handleRx PONG");
+            LOG_I(MODULE_PREFIX, "handleRxPacketData PONG");
 #endif
             break;
         }
@@ -483,7 +488,7 @@ uint32_t RdWebSocketLink::handleRxPacketData(const uint8_t *pBuf, uint32_t bufLe
     {
 #ifdef DEBUG_WEBSOCKET_LINK_EVENTS
         // Debug
-        LOG_I(MODULE_PREFIX, "handleRx callback eventCode %s len %d", getEventStr(callbackEventCode), _callbackData.size());
+        LOG_I(MODULE_PREFIX, "handleRxPacketData callback eventCode %s len %d", getEventStr(callbackEventCode), _callbackData.size());
 #endif
 
         // Callback
@@ -494,11 +499,11 @@ uint32_t RdWebSocketLink::handleRxPacketData(const uint8_t *pBuf, uint32_t bufLe
 
 #ifdef DEBUG_WEBSOCKET_LINK_DATA_STR
             String cbStr;
-            Utils::strFromBuffer(_callbackData.data(), _callbackData.size(), cbStr);
+            Utils::strFromBuffer(_callbackData.data(), _callbackData.size(), cbStr, false);
+            LOG_I(MODULE_PREFIX, "handleRxPacketData %s", cbStr.c_str());
 #endif
 #ifdef DEBUG_WEBSOCKET_LINK_DATA_BINARY
-            LOG_I(MODULE_PREFIX, "handleRx %s", cbStr.c_str());
-            Utils::logHexBuf(_callbackData.data(), _callbackData.size(), MODULE_PREFIX, "handleRx");
+            Utils::logHexBuf(_callbackData.data(), _callbackData.size(), MODULE_PREFIX, "handleRxPacketData");
 #endif
             // Perform callback
             _webSocketCB(callbackEventCode, _callbackData.data(), _callbackData.size());

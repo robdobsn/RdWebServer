@@ -31,6 +31,7 @@ const static char* MODULE_PREFIX = "WebConnMgr";
 #include "esp_heap_trace.h"
 #endif
 
+// Debug
 // #define DEBUG_WEB_CONN_MANAGER
 // #define DEBUG_WEB_SERVER_HANDLERS
 // #define DEBUG_WEBSOCKETS

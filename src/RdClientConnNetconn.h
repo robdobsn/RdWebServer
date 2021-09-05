@@ -41,13 +41,13 @@ public:
     }
 
     // Write
-    virtual bool write(const uint8_t* pBuf, uint32_t bufLen) override final;
+    virtual RdWebConnSendRetVal write(const uint8_t* pBuf, uint32_t bufLen, uint32_t maxRetryMs) override final;
 
     // Setup
     virtual void setup(bool blocking) override final;
 
     // Data access
-    virtual uint8_t* getDataStart(uint32_t& dataLen, bool& closeRequired) override final;
+    virtual uint8_t* getDataStart(uint32_t& dataLen, bool& errorOccurred, bool& connClosed) override final;
     virtual void getDataEnd() override final;
 
 private:

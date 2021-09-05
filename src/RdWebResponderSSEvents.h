@@ -83,6 +83,9 @@ private:
     static const uint32_t EVENT_TX_QUEUE_SIZE = 2;
     ThreadSafeQueue<RdWebSSEvent> _txQueue;
 
+    // Retry
+    static const uint32_t MAX_SSEVENT_SEND_RETRY_MS = 1;
+
     // Generate event message
     String generateEventMessage(const char *pMsg, const char *pEvent, uint32_t id);
 };

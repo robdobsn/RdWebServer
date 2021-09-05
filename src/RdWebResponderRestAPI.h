@@ -36,7 +36,7 @@ public:
     virtual bool startResponding(RdWebConnection& request) override final;
 
     // Get response next
-    virtual uint32_t getResponseNext(uint8_t* pBuf, uint32_t bufMaxLen) override final;
+    virtual uint32_t getResponseNext(uint8_t*& pBuf, uint32_t bufMaxLen) override final;
 
     // Get content type
     virtual const char* getContentType() override final;
@@ -70,6 +70,9 @@ private:
     bool _endpointCalled;
     String _requestStr;
     String _respStr;
+    uint32_t _respStrPos;
+    uint32_t _sendStartMs;
+    static const uint32_t SEND_DATA_OVERALL_TIMEOUT_MS = 1 * 60 * 1000;
 
     // Data received
     uint32_t _numBytesReceived;

@@ -34,13 +34,13 @@ void RdClientConnNetconn::setup(bool blocking)
        netconn_set_recvtimeout(_client, 1);
 }
 
-bool RdClientConnNetconn::write(const uint8_t* pBuf, uint32_t bufLen)
+RdWebConnSendRetVal RdClientConnNetconn::write(const uint8_t* pBuf, uint32_t bufLen, uint32_t maxRetryMs)
 {
     // Check active
     if (!isActive())
     {
         LOG_W(MODULE_PREFIX, "write conn %d isActive FALSE", getClientId());
-        return false;
+        return RdWebConnSendRetVal::WEB_CONN_SEND_FAIL;
     }
 
     esp_err_t err = netconn_write(_client, pBuf, bufLen, NETCONN_COPY);
@@ -49,18 +49,17 @@ bool RdClientConnNetconn::write(const uint8_t* pBuf, uint32_t bufLen)
         LOG_W(MODULE_PREFIX, "write failed err %s (%d) connClient %d",
                     RdWebInterface::espIdfErrToStr(err), err, getClientId());
     }
-    return err == ERR_OK;
+    return (err = ERR_OK) ? RdWebConnSendRetVal::WEB_CONN_SEND_OK : RdWebConnSendRetVal::WEB_CONN_SEND_FAIL;
 }
 
-uint8_t* RdClientConnNetconn::getDataStart(uint32_t& dataLen, bool& closeRequired)
+uint8_t* RdClientConnNetconn::getDataStart(uint32_t& dataLen, bool& errorOccurred, bool& connClosed)
 {
     // End any current data operation
     getDataEnd();
 
     // Check for data
     dataLen = 0;
-    closeRequired = false;
-    bool dataReady = getRxData(&_pInbuf, closeRequired);
+    bool dataReady = getRxData(&_pInbuf, connClosed);
 
     // Get any found data
     uint8_t *pBuf = nullptr;
@@ -73,6 +72,7 @@ uint8_t* RdClientConnNetconn::getDataStart(uint32_t& dataLen, bool& closeRequire
         {
             LOG_W(MODULE_PREFIX, "service netconn_data error %s buf %d connClient %d", 
                         RdWebInterface::espIdfErrToStr(err), (uint32_t)pBuf, getClientId());
+            errorOccurred = true;
             return nullptr;
         }
         dataLen = bufLen;

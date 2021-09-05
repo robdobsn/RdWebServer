@@ -9,7 +9,7 @@
 #include "RdWebResponderSSEvents.h"
 #include <RdWebConnection.h>
 #include "RdWebServerSettings.h"
-// #include "ProtocolEndpointManager.h"
+#include "RdWebConnDefs.h"
 #include <Logger.h>
 #include <Utils.h>
 
@@ -55,13 +55,13 @@ void RdWebResponderSSEvents::service()
 #endif
         // Format message
         String outMsg = generateEventMessage(event.getContent().c_str(), event.getGroup().c_str(), time(NULL));
-        if (_reqParams.getWebConnRawSend())
+        RdWebConnSendFn rawSendFn = _reqParams.getWebConnRawSend();
+        if (rawSendFn)
         {
-            bool rslt = _reqParams.getWebConnRawSend()((const uint8_t*)outMsg.c_str(), outMsg.length());
+            bool rslt = rawSendFn((const uint8_t*)outMsg.c_str(), outMsg.length(), MAX_SSEVENT_SEND_RETRY_MS) == RdWebConnSendRetVal::WEB_CONN_SEND_OK;
             if (!rslt)
                 _isActive = false;
         }
-        // _webSocketLink.sendMsg(WEBSOCKET_OPCODE_BINARY, frame.getData(), frame.getLen());
     }
 }
 
@@ -76,16 +76,6 @@ bool RdWebResponderSSEvents::handleData(const uint8_t *pBuf, uint32_t dataLen)
     Utils::strFromBuffer(pBuf, dataLen, outStr, false);
     LOG_I(MODULE_PREFIX, "handleData len %d %s", dataLen, outStr.c_str());
 #endif
-
-    // // Handle it with link
-    // _webSocketLink.handleRxData(pBuf, dataLen);
-
-    // // Check if the link is still active
-    // if (!_webSocketLink.isActive())
-    // {
-    //     _isActive = false;
-    // }
-
     return true;
 }
 
@@ -95,10 +85,6 @@ bool RdWebResponderSSEvents::handleData(const uint8_t *pBuf, uint32_t dataLen)
 
 bool RdWebResponderSSEvents::startResponding(RdWebConnection &request)
 {
-    // // Set link to upgrade-request already received state
-    // _webSocketLink.upgradeReceived(request.getHeader().webSocketKey,
-    //                     request.getHeader().webSocketVersion);
-
     // Now active
     _isActive = true;
 #ifdef DEBUG_RESPONDER_EVENTS

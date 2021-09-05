@@ -10,13 +10,20 @@
 
 #include "RdClientConnSockets.h"
 #include "RdWebInterface.h"
+#include "ArduinoTime.h"
+#include "Utils.h"
 #include <Logger.h>
 #include "lwip/api.h"
 #include "lwip/sockets.h"
 
 static const char *MODULE_PREFIX = "RdClientConnSockets";
 
-#define DEBUG_RETRY_ON_SOCKET_EAGAIN
+// Warn
+#define WARN_SOCKET_SEND_FAIL
+
+// Debug
+// #define DEBUG_SOCKET_EAGAIN
+// #define DEBUG_SOCKET_SEND
 
 RdClientConnSockets::RdClientConnSockets(int client)
 {
@@ -44,39 +51,66 @@ void RdClientConnSockets::setup(bool blocking)
     }
 }
 
-bool RdClientConnSockets::write(const uint8_t* pBuf, uint32_t bufLen)
+RdWebConnSendRetVal RdClientConnSockets::write(const uint8_t* pBuf, uint32_t bufLen, uint32_t maxRetryMs)
 {
     // Check active
     if (!isActive())
     {
         LOG_W(MODULE_PREFIX, "write conn %d isActive FALSE", getClientId());
-        return false;
+        return RdWebConnSendRetVal::WEB_CONN_SEND_FAIL;
     }
 
     // Write using socket
-    for (uint32_t retryIdx = 0; retryIdx < MAX_RETRIES_ON_EAGAIN_ERROR; retryIdx++)
+    uint32_t startMs = millis();
+    while (true)
     {
         int rslt = send(_client, pBuf, bufLen, 0);
         if (rslt < 0)
         {
             if (errno == EAGAIN)
             {
-#ifdef DEBUG_RETRY_ON_SOCKET_EAGAIN
-                LOG_I(MODULE_PREFIX, "write failed errno %d conn %d", errno, getClientId());
+                if ((maxRetryMs == 0) || Utils::isTimeout(millis(), startMs, maxRetryMs))
+                {
+                    if (maxRetryMs != 0)
+                    {
+#ifdef WARN_SOCKET_SEND_FAIL
+                        LOG_W(MODULE_PREFIX, "write EAGAIN timed-out conn %d bufLen %d retry %dms", getClientId(), bufLen, maxRetryMs);
+#else
+#ifdef DEBUG_SOCKET_EAGAIN
+                        LOG_I(MODULE_PREFIX, "write EAGAIN timed-out conn %d bufLen %d retry %dms", getClientId(), bufLen, maxRetryMs);
+#endif
+#endif
+                    }
+                    else
+                    {
+#ifdef DEBUG_SOCKET_EAGAIN
+                        LOG_I(MODULE_PREFIX, "write EAGAIN returning conn %d bufLen %d retry %dms", getClientId(), bufLen, maxRetryMs);
+#endif
+                    }
+                    return RdWebConnSendRetVal::WEB_CONN_SEND_EAGAIN;
+                }
+#ifdef DEBUG_SOCKET_EAGAIN
+                LOG_I(MODULE_PREFIX, "write failed errno %d conn %d bufLen %d retrying for %dms", errno, getClientId(), bufLen, maxRetryMs);
 #endif
                 vTaskDelay(1);
                 continue;
             }
-            LOG_W(MODULE_PREFIX, "write failed errno %d conn %d", errno, getClientId());
-            return false;
+#ifdef WARN_SOCKET_SEND_FAIL
+            LOG_I(MODULE_PREFIX, "write failed errno error %d conn %d bufLen %d", errno, getClientId(), bufLen);
+#endif
+            return RdWebConnSendRetVal::WEB_CONN_SEND_FAIL;
         }
-        return true;
+
+#ifdef DEBUG_SOCKET_SEND
+        LOG_I(MODULE_PREFIX, "write ok conn %d bufLen %d", getClientId(), bufLen);
+#endif
+
+        // Success
+        return RdWebConnSendRetVal::WEB_CONN_SEND_OK;
     }
-    LOG_W(MODULE_PREFIX, "write failed errno %d conn %d retries %d", errno, getClientId(), MAX_RETRIES_ON_EAGAIN_ERROR);
-    return false;
 }
 
-uint8_t* RdClientConnSockets::getDataStart(uint32_t& dataLen, bool& closeRequired)
+uint8_t* RdClientConnSockets::getDataStart(uint32_t& dataLen, bool& errorOccurred, bool& connClosed)
 {
     // End any current data operation
     getDataEnd();
@@ -90,7 +124,7 @@ uint8_t* RdClientConnSockets::getDataStart(uint32_t& dataLen, bool& closeRequire
     }
 
     // Check for data
-    int32_t bufLen = recv(_client, _pDataBuf, WEB_CONN_MAX_RX_BUFFER, 0);
+    int32_t bufLen = recv(_client, _pDataBuf, WEB_CONN_MAX_RX_BUFFER, MSG_DONTWAIT);
     if (bufLen < 0)
     {
         switch(errno)
@@ -100,7 +134,7 @@ uint8_t* RdClientConnSockets::getDataStart(uint32_t& dataLen, bool& closeRequire
                 break;
             default:
                 LOG_W(MODULE_PREFIX, "service read error %d", errno);
-                closeRequired = true;
+                errorOccurred = true;
                 break;
         }
         getDataEnd();
@@ -109,13 +143,12 @@ uint8_t* RdClientConnSockets::getDataStart(uint32_t& dataLen, bool& closeRequire
     else if (bufLen == 0)
     {
         LOG_W(MODULE_PREFIX, "service read conn closed %d", errno);
-        closeRequired = true;
+        connClosed = true;
         getDataEnd();
         return nullptr;
     }
 
     // Return received data
-    closeRequired = false;
     dataLen = bufLen;
     return _pDataBuf;
 }

@@ -34,13 +34,13 @@ void RdClientConnESP8266::setup(bool blocking)
 {
 }
 
-bool RdClientConnESP8266::write(const uint8_t* pBuf, uint32_t bufLen)
+RdWebConnSendRetVal RdClientConnESP8266::write(const uint8_t* pBuf, uint32_t bufLen, uint32_t maxRetryMs)
 {
     // Check active
     if (!isActive())
     {
         LOG_W(MODULE_PREFIX, "write conn %d isActive FALSE", getClientId());
-        return false;
+        return RdWebConnSendRetVal::WEB_CONN_SEND_FAIL;
     }
 
     // Write
@@ -51,10 +51,10 @@ bool RdClientConnESP8266::write(const uint8_t* pBuf, uint32_t bufLen)
         LOG_I(MODULE_PREFIX, "connectionWrite written %d != size %d", written, size);
         err = ERR_CONN;
     }
-    return err = ERR_OK;
+    return (err = ERR_OK) ? RdWebConnSendRetVal::WEB_CONN_SEND_OK : RdWebConnSendRetVal::WEB_CONN_SEND_FAIL;
 }
 
-uint8_t* RdClientConnESP8266::getDataStart(uint32_t& dataLen, bool& closeRequired)
+uint8_t* RdClientConnESP8266::getDataStart(uint32_t& dataLen, bool& errorOccurred, bool& connClosed)
 {
     // End any current data operation
     getDataEnd();

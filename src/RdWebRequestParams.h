@@ -41,6 +41,10 @@ public:
     {
         return _protocolChannelID;
     }
+    std::list<RdJson::NameValuePair>* getHeaders() const
+    {
+        return _pResponseHeaders;
+    }
     
 private:
     uint32_t _maxSendSize;

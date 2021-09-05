@@ -37,13 +37,7 @@ public:
     void handleRxData(const uint8_t* pBuf, uint32_t bufLen);
     
     // Get data to tx
-    uint32_t getTxData(uint8_t* pBuf, uint32_t bufMaxLen);
-
-    // Form response to upgrade connection
-    uint32_t formUpgradeResponse(const String& wsKey, const String& wsVersion, uint8_t* pBuf, uint32_t bufMaxLen);
-
-    // Gen the hash required for response
-    String genMagicResponse(const String& wsKey, const String& wsVersion);
+    uint32_t getTxData(uint8_t*& pBuf, uint32_t bufMaxLen);
 
     // Send message
     bool sendMsg(WebSocketOpCodes opCode, const uint8_t* pBuf, uint32_t bufLen);
@@ -91,6 +85,9 @@ private:
     // Raw send on the connection
     RdWebConnSendFn _rawConnSendFn;
 
+    // Data to be sent
+    String _wsUpgradeResponse;
+
     // Active
     bool _isActive;
 
@@ -99,6 +96,9 @@ private:
 
     // Max message size
     static const uint32_t MAX_WS_MESSAGE_SIZE = 5000;
+
+    // Retry
+    static const uint32_t MAX_WS_SEND_RETRY_MS = 0;
 
     // Ping/Pong sending
     // Set _pingIntervalMs to 0 to disable pings from server
@@ -200,6 +200,12 @@ private:
     uint32_t handleRxPacketData(const uint8_t* pBuf, uint32_t bufLen);
     uint32_t extractWSHeaderInfo(const uint8_t* pBuf, uint32_t bufLen);
     void unmaskData();
+
+    // Form response to upgrade connection
+    String formUpgradeResponse(const String& wsKey, const String& wsVersion, uint32_t bufMaxLen);
+
+    // Gen the hash required for response
+    String genMagicResponse(const String& wsKey, const String& wsVersion);
 
 };
 

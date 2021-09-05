@@ -84,6 +84,7 @@ RdWebResponder* RdWebHandlerStaticFiles::getNewResponder(const RdWebRequestHeade
 {
     // Debug
 #ifdef DEBUG_STATIC_FILE_HANDLER
+    uint64_t getResponderStartUs = micros();
     LOG_I(MODULE_PREFIX, "getNewResponder reqURL %s baseURI %s", requestHeader.URL.c_str(), _baseURI.c_str());    
 #endif
 
@@ -99,48 +100,37 @@ RdWebResponder* RdWebHandlerStaticFiles::getNewResponder(const RdWebRequestHeade
     if (requestHeader.reqConnType != REQ_CONN_TYPE_HTTP)
         return NULL;
 
-    // Check file exists
-    String filePath;
-    if (!urlFileExists(requestHeader, filePath))
-        return NULL;
+    // Check if the path is just root
+    String filePath = getFilePath(requestHeader, requestHeader.URL.equals("/"));
 
-    // Looks like we can handle this so create a new responder object
-    RdWebResponder* pResponder = new RdWebResponderFile(filePath, this, params);
+    // Create responder
+    RdWebResponder* pResponder = new RdWebResponderFile(filePath, this, params, requestHeader);
+
+    // Check valid
+    if (!pResponder)
+        return nullptr;
+
+    // Check active (otherwise file didn't exist, etc)
+    if (!pResponder->isActive())
+    {
+        delete pResponder;
+#ifdef DEBUG_STATIC_FILE_HANDLER
+    uint64_t getResponderEndUs = micros();
+    LOG_I(MODULE_PREFIX, "canHandle failed new responder (file not found?) uri %s took %lld", 
+                requestHeader.URL.c_str(), getResponderEndUs-getResponderStartUs);
+#endif
+        return nullptr;
+    }
 
     // Debug
 #ifdef DEBUG_STATIC_FILE_HANDLER
-    LOG_W(MODULE_PREFIX, "canHandle constructed new responder %lx uri %s", (unsigned long)pResponder, requestHeader.URL.c_str());
+    uint64_t getResponderEndUs = micros();
+    LOG_I(MODULE_PREFIX, "canHandle constructed new responder %lx uri %s took %lld", 
+                (unsigned long)pResponder, requestHeader.URL.c_str(), getResponderEndUs-getResponderStartUs);
 #endif
 
     // Return new responder - caller must clean up by deleting object when no longer needed
     return pResponder;
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Check url file exists
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-bool RdWebHandlerStaticFiles::urlFileExists(const RdWebRequestHeader& header, String& filePath)
-{
-    // Debug
-#ifdef DEBUG_STATIC_FILE_HANDLER
-    LOG_I(MODULE_PREFIX, "urlFileExists URL %s", header.URL.c_str());
-#endif
-
-    // Check if the path is just root
-    if (header.URL.equals("/"))
-        filePath = getFilePath(header, true);
-    else
-        filePath = getFilePath(header, false);
-
-    // Check exists
-    bool fileExists = fileSystem.exists(filePath.c_str());
-
-    // Debug
-#ifdef DEBUG_STATIC_FILE_HANDLER
-    LOG_I(MODULE_PREFIX, "urlFileExists path %s %s", filePath.c_str(), fileExists ? "found ok" : "NOT FOUND");
-#endif
-    return fileExists;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
