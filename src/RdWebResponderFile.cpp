@@ -15,6 +15,10 @@
 
 static const char *MODULE_PREFIX = "RdWebRespFile";
 
+// Warn
+#define WARN_RESPONDER_FILE
+
+// Debug
 // #define DEBUG_RESPONDER_FILE
 // #define DEBUG_RESPONDER_FILE_CONTENTS
 // #define DEBUG_RESPONDER_FILE_START_END
@@ -52,16 +56,33 @@ RdWebResponderFile::RdWebResponderFile(const String& filePath, RdWebHandler* pWe
         String gzipFilePath = filePath + ".gz";
         _isActive = _fileChunker.start(gzipFilePath, _reqParams.getMaxSendSize(), false, false, true);
         if (_isActive)
+        {
             addHeader("Content-Encoding", "gzip");
+#ifdef DEBUG_RESPONDER_FILE
+            LOG_I(MODULE_PREFIX, "constructor filePath %s", gzipFilePath.c_str());
+#endif
+        }
     }
 
     // Fallback to unzipped file if necessary
     if (!_isActive)
+    {
         _isActive = _fileChunker.start(filePath, _reqParams.getMaxSendSize(), false, false, true);
-
 #ifdef DEBUG_RESPONDER_FILE
-    LOG_I(MODULE_PREFIX, "constructor filePath %s", filePath.c_str());
+        if (_isActive)
+        {
+            LOG_I(MODULE_PREFIX, "constructor filePath %s", filePath.c_str());
+        }
 #endif
+    }
+
+#ifdef WARN_RESPONDER_FILE
+    if (!_isActive)
+    {
+        LOG_E(MODULE_PREFIX, "constructor failed to start filepath %s", filePath.c_str());
+    }
+#endif
+
 }
 
 RdWebResponderFile::~RdWebResponderFile()

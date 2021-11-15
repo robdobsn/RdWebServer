@@ -74,6 +74,7 @@ RdWebResponderRestAPI::~RdWebResponderRestAPI()
 bool RdWebResponderRestAPI::handleData(const uint8_t* pBuf, uint32_t dataLen)
 {
     // Record data received so we know when to respond
+    uint32_t curBufPos = _numBytesReceived;
     _numBytesReceived += dataLen;
 
     // Handle data which may be multipart
@@ -91,11 +92,11 @@ bool RdWebResponderRestAPI::handleData(const uint8_t* pBuf, uint32_t dataLen)
     else
     {
 #ifdef DEBUG_RESPONDER_REST_API_NON_MULTIPART_DATA
-        LOG_I(MODULE_PREFIX, "handleData len %d", dataLen);
+        LOG_I(MODULE_PREFIX, "handleData curPos %d bufLen %d totalLen %d", curBufPos, dataLen, _headerExtract.contentLength);
 #endif
         // Send as the body
         if (_endpoint.restApiFnBody)
-            _endpoint.restApiFnBody(_requestStr, pBuf, dataLen, 0, dataLen, _apiSourceInfo);
+            _endpoint.restApiFnBody(_requestStr, pBuf, dataLen, curBufPos, _headerExtract.contentLength, _apiSourceInfo);
     }
     return true;
 }
@@ -147,38 +148,21 @@ uint32_t RdWebResponderRestAPI::getResponseNext(uint8_t*& pBuf, uint32_t bufMaxL
         if (_endpoint.restApiFn)
             _endpoint.restApiFn(_requestStr, _respStr, _apiSourceInfo);
 
-        // Check how much of buffer to send
-        respLen = bufMaxLen > _respStr.length() ? _respStr.length() : bufMaxLen;
-
-#ifdef DEBUG_RESPONDER_API_START_END
-        if (respLen < _respStr.length())
-        {
-            LOG_I(MODULE_PREFIX, "getResponseNext API response too long %d sending first part %d URL %s",
-                        _respStr.length(), respLen, _requestStr.c_str());
-        }
-#endif
-
-        // Prep buffer to respond with
-        pBuf = (uint8_t*) _respStr.c_str();
-        _respStrPos = 0;
-
         // Endpoint done
         _endpointCalled = true;
     }
-    else
-    {
-        // Check how much of buffer to send
-        uint32_t respRemain = _respStr.length() - _respStrPos;
-        respLen = bufMaxLen > respRemain ? respRemain : bufMaxLen;
 
-        // Prep buffer
-        pBuf = (uint8_t*) (_respStr.c_str() + _respStrPos);
+    // Check how much of buffer to send
+    uint32_t respRemain = _respStr.length() - _respStrPos;
+    respLen = bufMaxLen > respRemain ? respRemain : bufMaxLen;
+
+    // Prep buffer
+    pBuf = (uint8_t*) (_respStr.c_str() + _respStrPos);
 
 #ifdef DEBUG_RESPONDER_API_START_END
-        LOG_I(MODULE_PREFIX, "getResponseNext API next chunk sending len %d URL %s",
-                    respLen, _requestStr.c_str());
+    LOG_I(MODULE_PREFIX, "getResponseNext API totalLen %d sending %d fromPos %d URL %s",
+                _respStr.length(), respLen, _respStrPos, _requestStr.c_str());
 #endif
-    }
 
     // Update position
     _respStrPos += respLen;
@@ -266,4 +250,22 @@ void RdWebResponderRestAPI::multipartOnHeaderNameValue(const String& name, const
 #ifdef DEBUG_MULTIPART_HEADERS
     LOG_W(MODULE_PREFIX, "multipartHeaderNameValue %s = %s", name.c_str(), val.c_str());
 #endif
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Get content length (or -1 if not known)
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+int RdWebResponderRestAPI::getContentLength()
+{
+    if (!_endpointCalled)
+    {
+        // Call endpoint
+        if (_endpoint.restApiFn)
+            _endpoint.restApiFn(_requestStr, _respStr, _apiSourceInfo);
+
+        // Endpoint done
+        _endpointCalled = true;
+    }
+    return _respStr.length();
 }

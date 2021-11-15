@@ -41,6 +41,9 @@ public:
     // Get content type
     virtual const char* getContentType() override final;
 
+    // Get content length (or -1 if not known)
+    virtual int getContentLength() override final;
+
     // Leave connection open
     virtual bool leaveConnOpen() override final;
 
