@@ -175,8 +175,18 @@ void RdWebConnection::clear()
 
 void RdWebConnection::clearAfterSendCompletion()
 {
-    _isClearPending = true;
-    _clearPendingStartMs = millis();
+    // Check if there is a timeout
+    if (CONNECTION_CLEAR_PENDING_TIME_MS > 0)
+    {
+        // Set clear pending
+        _isClearPending = true;
+        _clearPendingStartMs = millis();
+    }
+    else
+    {
+        // Clear immediately
+        clear();
+    }
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////

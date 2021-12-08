@@ -95,7 +95,7 @@ private:
     // Responder/connection clear pending
     bool _isClearPending;
     uint32_t _clearPendingStartMs;
-    static const uint32_t CONNECTION_CLEAR_PENDING_TIME_MS = 1000;
+    static const uint32_t CONNECTION_CLEAR_PENDING_TIME_MS = 0;
 
     // Max send buffer size
     uint32_t _maxSendBufferBytes;
