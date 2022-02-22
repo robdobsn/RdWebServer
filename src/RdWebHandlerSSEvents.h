@@ -32,7 +32,8 @@ public:
         return "HandlerSSEvents";
     }
     virtual RdWebResponder* getNewResponder(const RdWebRequestHeader& requestHeader, 
-                const RdWebRequestParams& params, const RdWebServerSettings& webServerSettings) override final
+                const RdWebRequestParams& params, const RdWebServerSettings& webServerSettings,
+                RdHttpStatusCode &statusCode) override final
     {
         // LOG_W("RdWebHandlerSSEvents", "getNewResponder %s connType %d method %d", 
         //             requestHeader.URL, requestHeader.reqConnType, requestHeader.extract.method);
@@ -56,6 +57,7 @@ public:
         // LOG_W("WebHandlerSSEvents", "getNewResponder constructed new responder %lx uri %s", (unsigned long)pResponder, requestHeader.URL.c_str());
 
         // Return new responder - caller must clean up by deleting object when no longer needed
+        statusCode = HTTP_STATUS_OK;
         return pResponder;
     }
 

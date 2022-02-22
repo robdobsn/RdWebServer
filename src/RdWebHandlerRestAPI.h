@@ -36,7 +36,8 @@ public:
         return "HandlerRESTAPI";
     }
     virtual RdWebResponder* getNewResponder(const RdWebRequestHeader& requestHeader, 
-            const RdWebRequestParams& params, const RdWebServerSettings& webServerSettings) override final
+            const RdWebRequestParams& params, const RdWebServerSettings& webServerSettings,
+            RdHttpStatusCode &statusCode) override final
     {
         // Check
         if (!_matchEndpointCB)
@@ -71,7 +72,9 @@ public:
             return nullptr;
         }
         // Looks like we can handle this so create a new responder object
-        RdWebResponder* pResponder = new RdWebResponderRestAPI(endpoint, this, params, reqStr, requestHeader.extract);
+        RdWebResponder* pResponder = new RdWebResponderRestAPI(endpoint, this, params, 
+                        reqStr, requestHeader.extract, 
+                        webServerSettings._restAPIChannelID);
 
         // Debug
 #ifdef DEBUG_WEB_HANDLER_REST_API
@@ -81,6 +84,7 @@ public:
 #endif
 
         // Return new responder - caller must clean up by deleting object when no longer needed
+        statusCode = HTTP_STATUS_OK;
         return pResponder;
     }
 

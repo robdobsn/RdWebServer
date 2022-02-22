@@ -80,7 +80,8 @@ const char* RdWebHandlerStaticFiles::getName()
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 RdWebResponder* RdWebHandlerStaticFiles::getNewResponder(const RdWebRequestHeader& requestHeader, 
-            const RdWebRequestParams& params, const RdWebServerSettings& webServerSettings)
+            const RdWebRequestParams& params, const RdWebServerSettings& webServerSettings,
+            RdHttpStatusCode &statusCode)
 {
     // Debug
 #ifdef DEBUG_STATIC_FILE_HANDLER
@@ -130,6 +131,7 @@ RdWebResponder* RdWebHandlerStaticFiles::getNewResponder(const RdWebRequestHeade
 #endif
 
     // Return new responder - caller must clean up by deleting object when no longer needed
+    statusCode = HTTP_STATUS_OK;
     return pResponder;
 }
 

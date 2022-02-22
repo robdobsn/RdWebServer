@@ -26,7 +26,9 @@ class RdWebResponderRestAPI : public RdWebResponder
 {
 public:
     RdWebResponderRestAPI(const RdWebServerRestEndpoint& endpoint, RdWebHandler* pWebHandler, 
-                        const RdWebRequestParams& params, String& reqStr, const RdWebRequestHeaderExtract& headerExtract);
+                        const RdWebRequestParams& params, String& reqStr, 
+                        const RdWebRequestHeaderExtract& headerExtract,
+                        uint32_t channelID);
     virtual ~RdWebResponderRestAPI();
 
     // Handle inbound data

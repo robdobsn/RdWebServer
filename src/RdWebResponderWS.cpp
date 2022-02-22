@@ -12,11 +12,13 @@
 #include <RdWebConnection.h>
 #include "RdWebServerSettings.h"
 #include "RdWebInterface.h"
+#include "RdWebHandlerWS.h"
 #include <Logger.h>
 #include <Utils.h>
 
 // Warn
 #define WARN_WS_SEND_APP_DATA_FAIL
+#define WARN_WS_PACKET_TOO_BIG
 
 // Debug
 // #define DEBUG_RESPONDER_WS
@@ -35,14 +37,18 @@ static const char *MODULE_PREFIX = "RdWebRespWS";
 // Constructor / Destructor
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-RdWebResponderWS::RdWebResponderWS(RdWebHandler* pWebHandler, const RdWebRequestParams& params, 
+RdWebResponderWS::RdWebResponderWS(RdWebHandlerWS* pWebHandler, const RdWebRequestParams& params, 
             const String& reqStr, const RdWebServerSettings& webServerSettings,
-            RdWebSocketCanAcceptCB canAcceptMsgCB, RdWebSocketMsgCB sendMsgCB)
-    : _reqParams(params), _canAcceptMsgCB(canAcceptMsgCB), _sendMsgCB(sendMsgCB), _txQueue(WEB_SOCKET_TX_QUEUE_SIZE)
+            RdWebSocketCanAcceptCB canAcceptMsgCB, RdWebSocketMsgCB sendMsgCB,
+            uint32_t channelID, uint32_t packetMaxBytes, uint32_t txQueueSize)
+    :   _reqParams(params), _canAcceptMsgCB(canAcceptMsgCB), 
+        _sendMsgCB(sendMsgCB), _txQueue(txQueueSize)
 {
     // Store socket info
     _pWebHandler = pWebHandler;
     _requestStr = reqStr;
+    _channelID = channelID;
+    _packetMaxBytes = packetMaxBytes;
 
     // Init socket link
     _webSocketLink.setup(std::bind(&RdWebResponderWS::webSocketCallback, this, 
@@ -52,6 +58,8 @@ RdWebResponderWS::RdWebResponderWS(RdWebHandler* pWebHandler, const RdWebRequest
 
 RdWebResponderWS::~RdWebResponderWS()
 {
+    if (_pWebHandler)
+        _pWebHandler->responderDelete(this);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -85,8 +93,9 @@ bool RdWebResponderWS::handleData(const uint8_t* pBuf, uint32_t dataLen)
 #ifdef DEBUG_RESPONDER_WS
 #ifdef DEBUG_WS_SEND_APP_DATA_ASCII
     String outStr;
-    Utils::strFromBuffer(pBuf, dataLen, outStr, false);
-    LOG_I(MODULE_PREFIX, "handleData len %d %s", dataLen, outStr.c_str());
+    Utils::strFromBuffer(pBuf, dataLen < MAX_DEBUG_TEXT_STR_LEN ? dataLen : MAX_DEBUG_TEXT_STR_LEN, outStr, false);
+    LOG_I(MODULE_PREFIX, "handleData len %d %s%s", dataLen, outStr.c_str(),
+                dataLen < MAX_DEBUG_TEXT_STR_LEN ? "" : " ...");
 #else
     LOG_I(MODULE_PREFIX, "handleData len %d", dataLen);
 #endif
@@ -111,7 +120,7 @@ bool RdWebResponderWS::handleData(const uint8_t* pBuf, uint32_t dataLen)
 bool RdWebResponderWS::readyForData()
 {
     if (_canAcceptMsgCB)
-        return _canAcceptMsgCB(_reqParams.getProtocolChannelID());
+        return _canAcceptMsgCB(_channelID);
     return false;
 }
 
@@ -145,7 +154,13 @@ uint32_t RdWebResponderWS::getResponseNext(uint8_t*& pBuf, uint32_t bufMaxLen)
     // Done response
 #ifdef DEBUG_RESPONDER_WS
     if (respLen > 0) {
-        LOG_I(MODULE_PREFIX, "getResponseNext respLen %d isActive %d", respLen, _isActive);
+#ifdef DEBUG_WS_SEND_APP_DATA_ASCII
+    String outStr;
+    Utils::strFromBuffer(pBuf, respLen, outStr, false);
+    LOG_I(MODULE_PREFIX, "getResponseNext respLen %d isActive %d %s", respLen, _isActive, outStr.c_str());
+#else
+    LOG_I(MODULE_PREFIX, "getResponseNext respLen %d isActive %d", respLen, _isActive);
+#endif
     }
 #endif
     return respLen;
@@ -175,6 +190,14 @@ bool RdWebResponderWS::leaveConnOpen()
 
 bool RdWebResponderWS::sendFrame(const uint8_t* pBuf, uint32_t bufLen)
 {
+    // Check packet size limit
+    if (bufLen > _packetMaxBytes)
+    {
+#ifdef WARN_WS_PACKET_TOO_BIG
+        LOG_W(MODULE_PREFIX, "sendFrame TOO BIG len %d maxLen %d", bufLen, _packetMaxBytes);
+#endif
+        return false;
+    }
     // Add to queue - don't block if full
     RdWebDataFrame frame(pBuf, bufLen);
     bool putRslt = _txQueue.put(frame, MAX_WAIT_FOR_TX_QUEUE_MS);
@@ -236,7 +259,7 @@ void RdWebResponderWS::webSocketCallback(RdWebSocketEventCode eventCode, const u
         {
             // Send the message
             if (_sendMsgCB && (pBuf != NULL))
-                _sendMsgCB(_reqParams.getProtocolChannelID(), (uint8_t*) pBuf, bufLen);
+                _sendMsgCB(_channelID, (uint8_t*) pBuf, bufLen);
 #ifdef DEBUG_WEBSOCKETS_TRAFFIC
             String msgText;
             if (pBuf)
@@ -249,14 +272,15 @@ void RdWebResponderWS::webSocketCallback(RdWebSocketEventCode eventCode, const u
         {
             // Send the message
             if (_sendMsgCB && (pBuf != NULL))
-                _sendMsgCB(_reqParams.getProtocolChannelID(), (uint8_t*) pBuf, bufLen);
+                _sendMsgCB(_channelID, (uint8_t*) pBuf, bufLen);
 #ifdef DEBUG_WEBSOCKETS_TRAFFIC
 			LOG_I(MODULE_PREFIX, "webSocketCallback rx binary len %i", bufLen);
 #endif
 #ifdef DEBUG_WEBSOCKETS_TRAFFIC_BINARY_DETAIL
             String rxDataStr;
-            Utils::getHexStrFromBytes(pBuf, bufLen, rxDataStr);
-			LOG_I(MODULE_PREFIX, "webSocketCallback rx binary len %s", rxDataStr.c_str());
+            Utils::getHexStrFromBytes(pBuf, bufLen < MAX_DEBUG_BIN_HEX_LEN ? bufLen : MAX_DEBUG_BIN_HEX_LEN, rxDataStr);
+			LOG_I(MODULE_PREFIX, "webSocketCallback rx binary len %s%s", rxDataStr.c_str(),
+                    bufLen < MAX_DEBUG_BIN_HEX_LEN ? "" : "...");
 #endif
 			break;
         }

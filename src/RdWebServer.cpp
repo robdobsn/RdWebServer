@@ -24,7 +24,7 @@
 static const char *MODULE_PREFIX = "RdWebServer";
 
 #define INFO_WEB_SERVER_SETUP
-// #define DEBUG_NEW_CONNECTION
+#define DEBUG_NEW_CONNECTION
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Constructor
@@ -47,9 +47,9 @@ void RdWebServer::setup(RdWebServerSettings& settings)
     _webServerSettings = settings;
     
 #ifdef INFO_WEB_SERVER_SETUP
-    LOG_I(MODULE_PREFIX, "setup port %d numConnSlots %d maxWS %d enableFileServer %d", 
+    LOG_I(MODULE_PREFIX, "setup port %d numConnSlots %d wsEn %d enableFileServer %d", 
             settings._serverTCPPort, settings._numConnSlots, 
-            settings._maxWebSockets, settings._enableFileServer);
+            settings._enableWebSockets, settings._enableFileServer);
 #endif
 
     // Start network interface if not already started
@@ -147,25 +147,6 @@ void RdWebServer::socketListenerTask(void* pvParameters)
 void RdWebServer::addResponseHeader(RdJson::NameValuePair headerInfo)
 {
     _connManager.addResponseHeader(headerInfo);
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Check if websocket can send
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-bool RdWebServer::webSocketCanSend(uint32_t protocolChannelID)
-{
-	return _connManager.webSocketCanSend(protocolChannelID);
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Send on a websocket (or all websockets)
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-bool RdWebServer::webSocketSendMsg(const uint8_t* pBuf, uint32_t bufLen, 
-                bool allWebSockets, uint32_t protocolChannelID)
-{
-	return _connManager.webSocketSendMsg(pBuf, bufLen, allWebSockets, protocolChannelID);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////

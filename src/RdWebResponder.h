@@ -105,8 +105,8 @@ public:
         return "NONE";
     }
 
-    // Get protocolChannelID for responder
-    virtual bool getProtocolChannelID(uint32_t& protocolChannelID)
+    // Get channelID for responder
+    virtual bool getChannelID(uint32_t& channelID)
     {
         return false;
     }

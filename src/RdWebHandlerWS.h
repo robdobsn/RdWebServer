@@ -14,23 +14,25 @@
 #include <Logger.h>
 #include <RdWebRequestHeader.h>
 #include <RdWebResponderWS.h>
+#include <ConfigBase.h>
+#include <vector>
 
 class RdWebRequest;
 
 class RdWebHandlerWS : public RdWebHandler
 {
 public:
-    RdWebHandlerWS(const String& wsPath, uint32_t maxWebSockets,
+    RdWebHandlerWS(const ConfigBase& config,
             RdWebSocketCanAcceptCB canAcceptRxMsgCB, RdWebSocketMsgCB rxMsgCB)
             : _canAcceptRxMsgCB(canAcceptRxMsgCB), _rxMsgCB(rxMsgCB)
     {
-        _wsPath = wsPath;
-        _webSocketProtocolChannelIDs.resize(maxWebSockets);
-        static const uint32_t WEB_SOCKET_CHANNEL_START_NO = 50;
-        uint32_t wsChanId = WEB_SOCKET_CHANNEL_START_NO;
-        // Assign incremental channel numbers initially
-        for (uint32_t& chanId : _webSocketProtocolChannelIDs)
-            chanId = wsChanId++;
+        // Store config
+        _wsConfig = config;
+
+        // Setup channelIDs mapping
+        uint32_t maxConn = _wsConfig.getLong("maxConn", 1);
+        _channelIDUsage.clear();
+        _channelIDUsage.resize(maxConn);
     }
     virtual ~RdWebHandlerWS()
     {
@@ -45,61 +47,103 @@ public:
     }
     virtual RdWebResponder* getNewResponder(const RdWebRequestHeader& requestHeader, 
                 const RdWebRequestParams& params, 
-                const RdWebServerSettings& webServerSettings) override final
+                const RdWebServerSettings& webServerSettings,
+                RdHttpStatusCode &statusCode
+                ) override final
     {
         // Check if websocket request
         if (requestHeader.reqConnType != REQ_CONN_TYPE_WEBSOCKET)
             return NULL;
 
+        String wsPath = _wsConfig.getString("pfix", "ws");
+        wsPath = wsPath.startsWith("/") ? wsPath : "/" + wsPath;
+
         // Check for WS prefix
-        if (!requestHeader.URL.startsWith(_wsPath))
+        if (!requestHeader.URL.startsWith(wsPath))
         {
-            LOG_W("WebHandlerWS", "getNewResponder unmatched ws req %s != expected %s", requestHeader.URL.c_str(), _wsPath.c_str());
+            LOG_W("WebHandlerWS", "getNewResponder unmatched ws req %s != expected %s", 
+                            requestHeader.URL.c_str(), wsPath.c_str());
+            // We don't change the status code here as we didn't find a match
+            return NULL;
+        }
+
+        // Check limits on connections
+        uint32_t wsConnIdxAvailable = UINT32_MAX;
+        for (uint32_t wsConnIdx = 0; wsConnIdx < _channelIDUsage.size(); wsConnIdx++)
+        {
+            if (!_channelIDUsage[wsConnIdx].isUsed)
+            {
+                wsConnIdxAvailable = wsConnIdx;
+                break;
+            }
+        }
+        if (wsConnIdxAvailable == UINT32_MAX)
+        {
+            statusCode = HTTP_STATUS_SERVICEUNAVAILABLE;
             return NULL;
         }
 
         // Looks like we can handle this so create a new responder object
         RdWebResponder* pResponder = new RdWebResponderWS(this, params, requestHeader.URL, 
-                    webServerSettings, _canAcceptRxMsgCB, _rxMsgCB);
+                    webServerSettings, _canAcceptRxMsgCB, _rxMsgCB, 
+                    _channelIDUsage[wsConnIdxAvailable].channelID,
+                    _wsConfig.getLong("pktMaxBytes", 5000),
+                    _wsConfig.getLong("txQueueMax", 2)
+                    );
+
+        if (pResponder)
+        {
+            statusCode = HTTP_STATUS_OK;
+            _channelIDUsage[wsConnIdxAvailable].isUsed = true;
+        }
 
         // Debug
-        // LOG_W("WebHandlerWS", "getNewResponder constructed new responder %lx uri %s", (unsigned long)pResponder, requestHeader.URL.c_str());
+        // LOG_I("WebHandlerWS", "getNewResponder constructed new responder %lx uri %s", (unsigned long)pResponder, requestHeader.URL.c_str());
 
         // Return new responder - caller must clean up by deleting object when no longer needed
         return pResponder;
     }
 
-    uint32_t getMaxWebSockets()
-    {
-        return _webSocketProtocolChannelIDs.size();
-    }
-
-    // Define websocket channel ID
-    void defineWebSocketChannelID(uint32_t wsIdx, uint32_t chanID)
+    // Setup websocket channel ID
+    void setupWebSocketChannelID(uint32_t wsConnIdx, uint32_t chanID)
     {
         // Check valid
-        if (wsIdx >= _webSocketProtocolChannelIDs.size())
+        if (wsConnIdx >= _channelIDUsage.size())
             return;
-        _webSocketProtocolChannelIDs[wsIdx] = chanID;
+        _channelIDUsage[wsConnIdx].channelID = chanID;
+        _channelIDUsage[wsConnIdx].isUsed = false;
     }
 
-    virtual void getChannelIDList(std::list<uint32_t>& chanIdList) override final
+    void responderDelete(RdWebResponderWS* pResponder)
     {
-        chanIdList.clear();
-        for (uint32_t chId : _webSocketProtocolChannelIDs)
-            chanIdList.push_back(chId);
+        // Get the channelID
+        uint32_t channelID = UINT32_MAX;
+        if (pResponder->getChannelID(channelID))
+        {
+            if (channelID < _channelIDUsage.size())
+            {
+                _channelIDUsage[channelID].isUsed = false;
+            }
+        }
     }
 
 private:
-    // Websocket path
-    String _wsPath;
+    // Config
+    ConfigBase _wsConfig;
 
     // WS interface functions
     RdWebSocketCanAcceptCB _canAcceptRxMsgCB;
     RdWebSocketMsgCB _rxMsgCB;
 
     // Web socket protocol channelIDs
-    std::vector<uint32_t> _webSocketProtocolChannelIDs;
+    class ChannelIDUsage
+    {
+    public:
+        uint32_t channelID = UINT32_MAX;
+        bool isUsed = false;
+    };
+    std::vector<ChannelIDUsage> _channelIDUsage;
 };
 
 #endif
+

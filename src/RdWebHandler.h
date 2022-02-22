@@ -10,12 +10,14 @@
 
 #include <WString.h>
 #include <list>
+#include "RdWebInterface.h"
 
 class RdWebRequest;
 class RdWebRequestParams;
 class RdWebRequestHeader;
 class RdWebResponder;
 class RdWebServerSettings;
+
 
 class RdWebHandler
 {
@@ -31,7 +33,8 @@ public:
         return "HandlerBase";
     }
     virtual RdWebResponder* getNewResponder(const RdWebRequestHeader& requestHeader, 
-                const RdWebRequestParams& params, const RdWebServerSettings& webServerSettings)
+                const RdWebRequestParams& params, const RdWebServerSettings& webServerSettings,
+                RdHttpStatusCode &statusCode)
     {
         return NULL;
     }
@@ -44,10 +47,6 @@ public:
         return false;
     }
     
-    virtual void getChannelIDList(std::list<uint32_t>& chanIdList)
-    {
-    }
-
 private:
 };
 

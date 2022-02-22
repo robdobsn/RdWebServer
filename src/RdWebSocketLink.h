@@ -105,6 +105,10 @@ private:
     uint32_t _pingIntervalMs;
     uint32_t _pingTimeLastMs;
     
+    // Debug
+    static const uint32_t MAX_DEBUG_TEXT_STR_LEN = 100;
+    static const uint32_t MAX_DEBUG_BIN_HEX_LEN = 50;
+
     // WS Header Info
     class WSHeaderInfo
     {

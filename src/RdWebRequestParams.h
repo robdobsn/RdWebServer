@@ -23,7 +23,6 @@ public:
         _maxSendSize = maxSendSize;
         _pResponseHeaders = pResponseHeaders;
         _webConnRawSend = webConnRawSend;
-        _protocolChannelID = 0;
     }
     uint32_t getMaxSendSize()
     {
@@ -32,14 +31,6 @@ public:
     RdWebConnSendFn getWebConnRawSend() const
     {
         return _webConnRawSend;
-    }
-    void setProtocolChannelID(uint32_t protocolChannelID)
-    {
-        _protocolChannelID = protocolChannelID;
-    }
-    uint32_t getProtocolChannelID() const
-    {
-        return _protocolChannelID;
     }
     std::list<RdJson::NameValuePair>* getHeaders() const
     {
@@ -50,5 +41,4 @@ private:
     uint32_t _maxSendSize;
     std::list<RdJson::NameValuePair>* _pResponseHeaders;
     RdWebConnSendFn _webConnRawSend;
-    uint32_t _protocolChannelID;
 };

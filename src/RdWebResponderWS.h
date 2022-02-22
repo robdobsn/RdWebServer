@@ -20,16 +20,17 @@
 #include <ThreadSafeQueue.h>
 #include "RdWebInterface.h"
 
-class RdWebHandler;
+class RdWebHandlerWS;
 class RdWebServerSettings;
 class ProtocolEndpointManager;
 
 class RdWebResponderWS : public RdWebResponder
 {
 public:
-    RdWebResponderWS(RdWebHandler* pWebHandler, const RdWebRequestParams& params,
+    RdWebResponderWS(RdWebHandlerWS* pWebHandler, const RdWebRequestParams& params,
             const String& reqStr, const RdWebServerSettings& webServerSettings,
-            RdWebSocketCanAcceptCB canAcceptMsgCB, RdWebSocketMsgCB sendMsgCB);
+            RdWebSocketCanAcceptCB canAcceptMsgCB, RdWebSocketMsgCB sendMsgCB,
+            uint32_t channelID, uint32_t packetMaxBytes, uint32_t txQueueSize);
     virtual ~RdWebResponderWS();
 
     // Service - called frequently
@@ -65,10 +66,10 @@ public:
         return "WS";
     }
 
-    // Get protocolChannelID for responder
-    virtual bool getProtocolChannelID(uint32_t& protocolChannelID)
+    // Get channelID for responder
+    virtual bool getChannelID(uint32_t& channelID)
     {
-        protocolChannelID = _reqParams.getProtocolChannelID();
+        channelID = _channelID;
         return true;
     }
 
@@ -77,7 +78,7 @@ public:
 
 private:
     // Handler
-    RdWebHandler* _pWebHandler;
+    RdWebHandlerWS* _pWebHandler;
 
     // Params
     RdWebRequestParams _reqParams;
@@ -94,16 +95,25 @@ private:
     // Send message function
     RdWebSocketMsgCB _sendMsgCB;
 
+    // ChannelID
+    uint32_t _channelID = UINT32_MAX;
+
     // Vars
     String _requestStr;
 
     // Queue for sending frames over the web socket
-    static const uint32_t WEB_SOCKET_TX_QUEUE_SIZE = 10;
     ThreadSafeQueue<RdWebDataFrame> _txQueue;
     static const uint32_t MAX_WAIT_FOR_TX_QUEUE_MS = 2;
 
+    // Max packet size
+    uint32_t _packetMaxBytes = 5000;
+
     // Callback on websocket activity
     void webSocketCallback(RdWebSocketEventCode eventCode, const uint8_t* pBuf, uint32_t bufLen);
+
+    // Debug
+    static const uint32_t MAX_DEBUG_TEXT_STR_LEN = 100;
+    static const uint32_t MAX_DEBUG_BIN_HEX_LEN = 50;    
 };
 
 #endif

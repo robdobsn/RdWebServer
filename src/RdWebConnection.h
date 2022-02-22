@@ -29,8 +29,8 @@ public:
     // Called frequently
     void service();
 
-    // Send on web socket
-    bool sendOnWebSocket(const uint8_t* pBuf, uint32_t bufLen);
+    // Send on connection
+    bool sendOnConn(const uint8_t* pBuf, uint32_t bufLen);
 
     // Send on server-side events
     void sendOnSSEvents(const char* eventContent, const char* eventGroup);

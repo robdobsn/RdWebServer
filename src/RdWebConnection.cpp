@@ -199,13 +199,13 @@ bool RdWebConnection::isActive()
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Send on websocket
+// Send on connection
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool RdWebConnection::sendOnWebSocket(const uint8_t* pBuf, uint32_t bufLen)
+bool RdWebConnection::sendOnConn(const uint8_t* pBuf, uint32_t bufLen)
 {
 #ifdef DEBUG_WEB_SOCKET_SEND
-    LOG_I(MODULE_PREFIX, "sendOnWebSocket len %d responder %d connId %d", bufLen, (uint32_t)_pResponder, 
+    LOG_I(MODULE_PREFIX, "sendOnConnection len %d responder %d connId %d", bufLen, (uint32_t)_pResponder, 
                     _pClientConn ? _pClientConn->getClientId() : 0);
 #endif
 
@@ -536,7 +536,7 @@ bool RdWebConnection::serviceConnHeader(const uint8_t* pRxData, uint32_t dataLen
     if (_pResponder) 
     {
         uint32_t channelID = 0;
-        bool chanIdOk = _pResponder->getProtocolChannelID(channelID);
+        bool chanIdOk = _pResponder->getChannelID(channelID);
         LOG_I(MODULE_PREFIX, "serviceConnHeader new responder type %s chanID %d%s responder %d", _pResponder->getResponderType(), 
                             channelID, chanIdOk ? "" : " (INVALID)", (uint32_t)_pResponder);
     } 

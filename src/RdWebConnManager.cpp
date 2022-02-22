@@ -211,10 +211,10 @@ bool RdWebConnManager::addHandler(RdWebHandler *pHandler)
 #endif
         return false;
     }
-    else if (pHandler->isWebSocketHandler() && (_webServerSettings._maxWebSockets == 0))
+    else if (pHandler->isWebSocketHandler() && (!_webServerSettings._enableWebSockets))
     {
 #ifdef DEBUG_WEB_SERVER_HANDLERS
-        LOG_I(MODULE_PREFIX, "addHandler NOT ADDING %s as max websockets == 0", pHandler->getName());
+        LOG_I(MODULE_PREFIX, "addHandler NOT ADDING %s as no websocket configs", pHandler->getName());
 #endif
         return false;
     }
@@ -233,53 +233,44 @@ bool RdWebConnManager::addHandler(RdWebHandler *pHandler)
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 RdWebResponder *RdWebConnManager::getNewResponder(const RdWebRequestHeader &header,
-                                                  const RdWebRequestParams &params, RdHttpStatusCode &statusCode)
+                                                  const RdWebRequestParams &params, 
+                                                  RdHttpStatusCode &statusCode)
 {
-    // Check limit on websockets
-    RdWebRequestParams reqParams = params;
-    if (header.reqConnType == REQ_CONN_TYPE_WEBSOCKET)
-    {
-        uint32_t protocolChannelID = 0;
-        if (allocateWebSocketChannelID(protocolChannelID))
-        {
-            reqParams.setProtocolChannelID(protocolChannelID);
-        }
-        else
-        {
-            statusCode = HTTP_STATUS_SERVICEUNAVAILABLE;
-            return nullptr;
-        }
-    }
-
     // Iterate handlers to find one that gives a responder
+    statusCode = HTTP_STATUS_NOTFOUND;
     for (RdWebHandler *pHandler : _webHandlers)
     {
         if (pHandler)
         {
             // Get a responder
-            RdWebResponder *pResponder = pHandler->getNewResponder(header, reqParams,
-                                                                   _webServerSettings);
+            RdWebResponder *pResponder = pHandler->getNewResponder(header, params,
+                                                _webServerSettings, statusCode);
 
 #ifdef DEBUG_NEW_RESPONDER
-            LOG_I(MODULE_PREFIX, "getNewResponder url %s handlerType %s result %s",
+            LOG_I(MODULE_PREFIX, "getNewResponder url %s handlerType %s result %s httpStatus %s",
                   header.URL.c_str(), pHandler->getName(),
-                  pResponder ? "OK" : "NoMatch");
+                  pResponder ? "OK" : "NoMatch",
+                  RdWebInterface::getHTTPStatusStr(statusCode));
 #endif
 
             // Return responder if there is one
             if (pResponder)
                 return pResponder;
+
+            // Check status and return status code if something matched but there was
+            // another error
+            if (statusCode != HTTP_STATUS_NOTFOUND)
+                break;
         }
     }
-    statusCode = HTTP_STATUS_NOTFOUND;
     return nullptr;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Check if websocket is ready to send
+// Check if channel is ready to send
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool RdWebConnManager::webSocketCanSend(uint32_t& protocolChannelID)
+bool RdWebConnManager::canSend(uint32_t& channelID, bool& noConn)
 {
     // Find websocket responder corresponding to channel
     for (uint32_t i = 0; i < _webConnections.size(); i++)
@@ -295,27 +286,28 @@ bool RdWebConnManager::webSocketCanSend(uint32_t& protocolChannelID)
 
         // Get channelID
         uint32_t usedChannelID = 0;
-        if (!pResponder->getProtocolChannelID(usedChannelID))
+        if (!pResponder->getChannelID(usedChannelID))
             continue;
 
         // Check for channelID match
-        if (usedChannelID == protocolChannelID)
+        if (usedChannelID == channelID)
         {
             return pResponder->readyForData();
         }
     }
 
-    // If websocket doesn't exist (maybe it has just closed) then return true as this
-    // message needs to be discarded so that queue is not blocked indefinitely
-    return true;
+    // If channel doesn't exist (maybe it has just closed) then
+    // indicate no connection so that messages can be discarded
+    noConn = true;
+    return false;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Send to all WebSockets
+// Send message on channel
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool RdWebConnManager::webSocketSendMsg(const uint8_t* pBuf, uint32_t bufLen,
-                                        bool allWebSockets, uint32_t protocolChannelID)
+bool RdWebConnManager::sendMsg(const uint8_t* pBuf, uint32_t bufLen,
+                                        bool allChannels, uint32_t channelID)
 {
     bool anyOk = false;
     for (uint32_t i = 0; i < _webConnections.size(); i++)
@@ -325,8 +317,8 @@ bool RdWebConnManager::webSocketSendMsg(const uint8_t* pBuf, uint32_t bufLen,
             uint32_t debugChanId = 0;
             bool debugChanIdOk = false;
             if (_webConnections[i].getResponder())
-                debugChanIdOk = _webConnections[i].getResponder()->getProtocolChannelID(debugChanId);
-            LOG_I(MODULE_PREFIX, "sendOnWebSocket webConn %d active %d responder %ld chanID %d ",
+                debugChanIdOk = _webConnections[i].getResponder()->getChannelID(debugChanId);
+            LOG_I(MODULE_PREFIX, "sendMsg webConn %d active %d responder %ld chanID %d ",
                   i,
                   _webConnections[i].isActive(),
                   (unsigned long)_webConnections[i].getResponder(),
@@ -339,7 +331,7 @@ bool RdWebConnManager::webSocketSendMsg(const uint8_t* pBuf, uint32_t bufLen,
             continue;
 
         // Flag indicating we should send
-        bool sendOnThisSocket = allWebSockets;
+        bool sendOnThisSocket = allChannels;
         if (!sendOnThisSocket)
         {
             // Get responder
@@ -349,57 +341,19 @@ bool RdWebConnManager::webSocketSendMsg(const uint8_t* pBuf, uint32_t bufLen,
 
             // Get channelID
             uint32_t usedChannelID = 0;
-            if (!pResponder->getProtocolChannelID(usedChannelID))
+            if (!pResponder->getChannelID(usedChannelID))
                 continue;
 
             // Check for the channelID of the message
-            if (usedChannelID == protocolChannelID)
+            if (usedChannelID == channelID)
                 sendOnThisSocket = true;
         }
 
         // Send if appropriate
-        if (sendOnThisSocket && (_webConnections[i].getHeader().reqConnType == REQ_CONN_TYPE_WEBSOCKET))
-            anyOk |= _webConnections[i].sendOnWebSocket(pBuf, bufLen);
+        if (sendOnThisSocket)
+            anyOk |= _webConnections[i].sendOnConn(pBuf, bufLen);
     }
     return anyOk;
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Allocate WebSocket channelID
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-bool RdWebConnManager::allocateWebSocketChannelID(uint32_t& protocolChannelID)
-{
-    // Get list of web-socket channel IDs
-    RdWebHandler *pWsHandler = getWebSocketHandler();
-    if (!pWsHandler)
-        return false;
-    std::list<uint32_t> possibleChannelIDs;
-    pWsHandler->getChannelIDList(possibleChannelIDs);
-
-    // Find an used channelIDs
-    for (int i = 0; i < _webConnections.size(); i++)
-    {
-        // Check active
-        if (!_webConnections[i].isActive())
-            continue;
-
-        // Check if there's a responder
-        RdWebResponder *pResponder = _webConnections[i].getResponder();
-        if (!pResponder)
-            continue;
-
-        // Check if using channelID
-        uint32_t usedChannelID = 0;
-        if (pResponder->getProtocolChannelID(usedChannelID))
-            possibleChannelIDs.remove(usedChannelID);
-    }
-
-    // Check for remaining channelID
-    if (possibleChannelIDs.size() == 0)
-        return false;
-    protocolChannelID = possibleChannelIDs.front();
-    return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -417,23 +371,6 @@ void RdWebConnManager::serverSideEventsSendMsg(const char *eventContent, const c
         if (_webConnections[i].getHeader().reqConnType == REQ_CONN_TYPE_EVENT)
             _webConnections[i].sendOnSSEvents(eventContent, eventGroup);
     }
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Get websocket handler
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-RdWebHandler *RdWebConnManager::getWebSocketHandler()
-{
-    // Find websocket handler
-    for (RdWebHandler *pHandler : _webHandlers)
-    {
-        if (!pHandler)
-            continue;
-        if (pHandler->isWebSocketHandler())
-            return pHandler;
-    }
-    return nullptr;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////

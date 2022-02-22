@@ -164,6 +164,6 @@ public:
 typedef std::function<bool(const char* url, RdWebServerMethod method, RdWebServerRestEndpoint& endpoint)> RdWebAPIMatchEndpointCB;
 
 // Websocket support
-typedef std::function<bool(uint32_t protocolChannelID)> RdWebSocketCanAcceptCB;
-typedef std::function<void(uint32_t protocolChannelID, const uint8_t* pBuf, uint32_t bufLen)> RdWebSocketMsgCB;
+typedef std::function<bool(uint32_t channelID)> RdWebSocketCanAcceptCB;
+typedef std::function<void(uint32_t channelID, const uint8_t* pBuf, uint32_t bufLen)> RdWebSocketMsgCB;
 

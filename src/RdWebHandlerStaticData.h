@@ -59,7 +59,8 @@ public:
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     virtual RdWebResponder* getNewResponder(const RdWebRequestHeader& requestHeader, 
-                const RdWebRequestParams& params, const RdWebServerSettings& webServerSettings) override final
+                const RdWebRequestParams& params, const RdWebServerSettings& webServerSettings,
+                RdHttpStatusCode &statusCode) override final
     {
         // Debug
 #ifdef DEBUG_STATIC_DATA_HANDLER
@@ -97,6 +98,7 @@ public:
 #endif
 
         // Return new responder - caller must clean up by deleting object when no longer needed
+        statusCode = HTTP_STATUS_OK;
         return pResponder;
 
     }

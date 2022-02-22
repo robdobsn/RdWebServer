@@ -28,30 +28,33 @@ public:
     {
         _serverTCPPort = DEFAULT_HTTP_PORT;
         _numConnSlots = 6;
-        _maxWebSockets = 3;
+        _enableWebSockets = true;
         _pingIntervalMs = 1000;
         _enableFileServer = true;
         _taskCore = DEFAULT_TASK_CORE;
         _taskPriority = DEFAULT_TASK_PRIORITY;
         _taskStackSize = DEFAULT_TASK_SIZE_BYTES;
         _sendBufferMaxLen = DEFAULT_SEND_BUFFER_MAX_LEN;
+        _restAPIChannelID = UINT32_MAX;
     }
 
-    RdWebServerSettings(int port, uint32_t connSlots, uint32_t maxWS, 
+    RdWebServerSettings(int port, uint32_t connSlots, bool wsEnable, 
             uint32_t pingIntervalMs, 
             bool enableFileServer, uint32_t taskCore,
             uint32_t taskPriority, uint32_t taskStackSize,
-            uint32_t sendBufferMaxLen)
+            uint32_t sendBufferMaxLen,
+            uint32_t restAPIChannelID)
     {
         _serverTCPPort = port;
         _numConnSlots = connSlots;
-        _maxWebSockets = maxWS;
+        _enableWebSockets = wsEnable;
         _pingIntervalMs = pingIntervalMs;
         _enableFileServer = enableFileServer;
         _taskCore = taskCore;
         _taskPriority = taskPriority;
         _taskStackSize = taskStackSize;
         _sendBufferMaxLen = sendBufferMaxLen;
+        _restAPIChannelID = restAPIChannelID;
     }
 
     // TCP port of server
@@ -60,8 +63,8 @@ public:
     // Number of connection slots
     uint32_t _numConnSlots;
 
-    // Max number of web sockets
-    uint32_t _maxWebSockets;
+    // Enable websockets
+    bool _enableWebSockets;
 
     // Ping interval for websockets (0 to disable)
     uint32_t _pingIntervalMs;
@@ -76,4 +79,7 @@ public:
 
     // Max length of send buffer
     uint32_t _sendBufferMaxLen;
+
+    // Channel ID for REST API
+    uint32_t _restAPIChannelID;
 };

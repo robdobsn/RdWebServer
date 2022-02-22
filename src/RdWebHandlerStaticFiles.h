@@ -24,7 +24,8 @@ public:
     virtual ~RdWebHandlerStaticFiles();
     virtual const char* getName() override;
     virtual RdWebResponder* getNewResponder(const RdWebRequestHeader& requestHeader, 
-                const RdWebRequestParams& params, const RdWebServerSettings& webServerSettings) override final;
+                const RdWebRequestParams& params, const RdWebServerSettings& webServerSettings,
+                RdHttpStatusCode &statusCode) override final;
     virtual bool isFileHandler() override final
     {
         return true;

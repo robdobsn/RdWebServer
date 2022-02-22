@@ -165,9 +165,12 @@ void RdWebSocketLink::handleRxData(const uint8_t *pBuf, uint32_t bufLen)
 #endif
 #ifdef DEBUG_WEBSOCKET_DATA_BUFFERING_CONTENT
             String prevResidual;
-            Utils::getHexStrFromBytes(_rxDataToProcess.data(), _rxDataToProcess.size(), prevResidual);
-            LOG_I(MODULE_PREFIX, "handleRxData prevResidual len %d data %s", 
-                    _rxDataToProcess.size(), prevResidual.c_str());
+            Utils::getHexStrFromBytes(_rxDataToProcess.data(), 
+                    _rxDataToProcess.size() < MAX_DEBUG_BIN_HEX_LEN ? _rxDataToProcess.size() : MAX_DEBUG_BIN_HEX_LEN,
+                    prevResidual);
+            LOG_I(MODULE_PREFIX, "handleRxData prevResidual len %d data %s%s", 
+                    _rxDataToProcess.size(), prevResidual.c_str(),
+                    _rxDataToProcess.size() < MAX_DEBUG_BIN_HEX_LEN ? "" : "...");
 #endif
             //_rxDataToProcess.insert(_rxDataToProcess.end(), pBuf, pBuf+bufLen);
             uint32_t curSize = _rxDataToProcess.size();
@@ -177,9 +180,12 @@ void RdWebSocketLink::handleRxData(const uint8_t *pBuf, uint32_t bufLen)
             bufLen = _rxDataToProcess.size();
 #ifdef DEBUG_WEBSOCKET_DATA_BUFFERING_CONTENT
             String dataToProc;
-            Utils::getHexStrFromBytes(_rxDataToProcess.data(), _rxDataToProcess.size(), dataToProc);
-            LOG_I(MODULE_PREFIX, "handleRxData agg dataToProc len %d data %s", 
-                    _rxDataToProcess.size(), dataToProc.c_str());
+            Utils::getHexStrFromBytes(_rxDataToProcess.data(), 
+                    _rxDataToProcess.size() < MAX_DEBUG_BIN_HEX_LEN ? _rxDataToProcess.size() : MAX_DEBUG_BIN_HEX_LEN, 
+                    dataToProc);
+            LOG_I(MODULE_PREFIX, "handleRxData agg dataToProc len %d data %s%s", 
+                    _rxDataToProcess.size(), dataToProc.c_str(),
+                    _rxDataToProcess.size() < MAX_DEBUG_BIN_HEX_LEN ? "" : "...");
 #endif
         }
     }
@@ -202,9 +208,12 @@ void RdWebSocketLink::handleRxData(const uint8_t *pBuf, uint32_t bufLen)
 #endif
 #ifdef DEBUG_WEBSOCKET_DATA_BUFFERING_CONTENT
             String residualFinalStr;
-            Utils::getHexStrFromBytes(_rxDataToProcess.data(), _rxDataToProcess.size(), residualFinalStr);
-            LOG_I(MODULE_PREFIX, "handleRxData residual len %d data %s", 
-                    _rxDataToProcess.size(), residualFinalStr.c_str());
+            Utils::getHexStrFromBytes(_rxDataToProcess.data(), 
+                    _rxDataToProcess.size() < MAX_DEBUG_BIN_HEX_LEN ? _rxDataToProcess.size() : MAX_DEBUG_BIN_HEX_LEN,
+                    residualFinalStr);
+            LOG_I(MODULE_PREFIX, "handleRxData residual len %d data %s%s", 
+                    _rxDataToProcess.size(), residualFinalStr.c_str(),
+                    _rxDataToProcess.size() < MAX_DEBUG_BIN_HEX_LEN ? "" : "...");
 #endif
             break;
         }
@@ -218,8 +227,9 @@ void RdWebSocketLink::handleRxData(const uint8_t *pBuf, uint32_t bufLen)
         bufLen -= dataConsumed;
 #ifdef DEBUG_WEBSOCKET_DATA_BUFFERING_CONTENT
         String nextDataStr;
-        Utils::getHexStrFromBytes(pBuf, bufLen, nextDataStr);
-        LOG_I(MODULE_PREFIX, "handleRxData nextData len %d data %s", bufLen, nextDataStr.c_str());
+        Utils::getHexStrFromBytes(pBuf, bufLen < MAX_DEBUG_BIN_HEX_LEN ? bufLen : MAX_DEBUG_BIN_HEX_LEN, nextDataStr);
+        LOG_I(MODULE_PREFIX, "handleRxData nextData len %d data %s%s", bufLen, nextDataStr.c_str(),
+                bufLen < MAX_DEBUG_BIN_HEX_LEN ? "" : "...");
 #endif
     }
 }
@@ -499,11 +509,16 @@ uint32_t RdWebSocketLink::handleRxPacketData(const uint8_t *pBuf, uint32_t bufLe
 
 #ifdef DEBUG_WEBSOCKET_LINK_DATA_STR
             String cbStr;
-            Utils::strFromBuffer(_callbackData.data(), _callbackData.size(), cbStr, false);
-            LOG_I(MODULE_PREFIX, "handleRxPacketData %s", cbStr.c_str());
+            Utils::strFromBuffer(_callbackData.data(), 
+                        _callbackData.size() < MAX_DEBUG_TEXT_STR_LEN ? _callbackData.size() : MAX_DEBUG_TEXT_STR_LEN, 
+                        cbStr, false);
+            LOG_I(MODULE_PREFIX, "handleRxPacketData %s%s", cbStr.c_str(),
+                        _callbackData.size() < MAX_DEBUG_TEXT_STR_LEN ? "" : " ...");
 #endif
 #ifdef DEBUG_WEBSOCKET_LINK_DATA_BINARY
-            Utils::logHexBuf(_callbackData.data(), _callbackData.size(), MODULE_PREFIX, "handleRxPacketData");
+            Utils::logHexBuf(_callbackData.data(), 
+                        _callbackData.size() < MAX_DEBUG_BIN_HEX_LEN ? _callbackData.size() : MAX_DEBUG_BIN_HEX_LEN, 
+                        MODULE_PREFIX, "handleRxPacketData");
 #endif
             // Perform callback
             _webSocketCB(callbackEventCode, _callbackData.data(), _callbackData.size());

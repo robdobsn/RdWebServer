@@ -28,8 +28,10 @@ static const char *MODULE_PREFIX = "RdWebRespREST";
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 RdWebResponderRestAPI::RdWebResponderRestAPI(const RdWebServerRestEndpoint& endpoint, RdWebHandler* pWebHandler, 
-                    const RdWebRequestParams& params, String& reqStr, const RdWebRequestHeaderExtract& headerExtract)
-    : _reqParams(params), _apiSourceInfo(params.getProtocolChannelID())
+                    const RdWebRequestParams& params, String& reqStr, 
+                    const RdWebRequestHeaderExtract& headerExtract,
+                    uint32_t channelID)
+    : _reqParams(params), _apiSourceInfo(channelID)
 {
     _endpoint = endpoint;
     _pWebHandler = pWebHandler;

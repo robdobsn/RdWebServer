@@ -73,12 +73,12 @@ public:
         return _webServerSettings;
     }
 
-    // Check if websocket can send a message
-    bool webSocketCanSend(uint32_t& protocolChannelID);
+    // Check if channel can send a message
+    bool canSend(uint32_t& channelID, bool& noConn);
 
-    // Send on a websocket (or all websockets)
-    bool webSocketSendMsg(const uint8_t* pBuf, uint32_t bufLen, 
-                bool allWebSockets, uint32_t protocolChannelID);
+    // Send a message on a channel
+    bool sendMsg(const uint8_t* pBuf, uint32_t bufLen, 
+                bool allWebSockets, uint32_t channelID);
 
     // Send to all server-side events
     void serverSideEventsSendMsg(const char* eventContent, const char* eventGroup);
@@ -115,8 +115,7 @@ private:
     bool accommodateConnection(RdClientConnBase* pClientConn);
     bool findEmptySlot(uint32_t& slotIx);
     void serviceConnections();
-    RdWebHandler* getWebSocketHandler();
-    bool allocateWebSocketChannelID(uint32_t& protocolChannelID);
+    bool allocateWebSocketChannelID(uint32_t& channelID);
     // Handle an incoming connection
     bool handleNewConnection(RdClientConnBase* pClientConn);
 

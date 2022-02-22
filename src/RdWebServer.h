@@ -34,18 +34,18 @@ public:
     // Handler
     bool addHandler(RdWebHandler* pHandler);
 
-    // Get max websockets
-    uint32_t getMaxWebSockets()
+    // Check if channel can send
+    bool canSend(uint32_t channelID, bool& noConn)
     {
-        return _webServerSettings._maxWebSockets;
+        return _connManager.canSend(channelID, noConn);
     }
 
-    // Check if websocket can send
-    bool webSocketCanSend(uint32_t protocolChannelID);
-
-    // Send on a websocket (or all websockets)
-    bool webSocketSendMsg(const uint8_t* pBuf, uint32_t bufLen, 
-                bool allWebSockets, uint32_t protocolChannelID);
+    // Send message on a channel
+    bool sendMsg(const uint8_t* pBuf, uint32_t bufLen, 
+                bool allChannels, uint32_t channelID)
+    {
+        return _connManager.sendMsg(pBuf, bufLen, allChannels, channelID);
+    }
 
     // Send to all server-side events
     void serverSideEventsSendMsg(const char* eventContent, const char* eventGroup);
