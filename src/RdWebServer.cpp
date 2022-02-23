@@ -24,7 +24,7 @@
 static const char *MODULE_PREFIX = "RdWebServer";
 
 #define INFO_WEB_SERVER_SETUP
-#define DEBUG_NEW_CONNECTION
+// #define DEBUG_NEW_CONNECTION
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Constructor

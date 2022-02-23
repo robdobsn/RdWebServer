@@ -18,7 +18,6 @@ class RdWebRequestHeader;
 class RdWebResponder;
 class RdWebServerSettings;
 
-
 class RdWebHandler
 {
 public:
