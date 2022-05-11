@@ -38,6 +38,7 @@ static const char *MODULE_PREFIX = "RdWSLink";
 // #define DEBUG_WEBSOCKET_DATA_BUFFERING
 // #define DEBUG_WEBSOCKET_DATA_BUFFERING_CONTENT
 // #define DEBUG_WEBSOCKET_DATA_PROCESSING
+// #define DEBUG_WEBSOCKET_RX_DETAIL
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Constructor / Destructor
@@ -51,6 +52,8 @@ RdWebSocketLink::RdWebSocketLink()
     _rawConnSendFn = NULL;
     _isActive = false;
     _pingTimeLastMs = 0;
+    _pongRxLastMs = 0;
+    _disconnIfNoPongMs = 0;
 }
 
 RdWebSocketLink::~RdWebSocketLink()
@@ -62,12 +65,14 @@ RdWebSocketLink::~RdWebSocketLink()
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void RdWebSocketLink::setup(RdWebSocketCB webSocketCB, RdWebConnSendFn rawConnSendFn,
-                uint32_t pingIntervalMs, bool roleIsServer)
+                uint32_t pingIntervalMs, bool roleIsServer, uint32_t disconnIfNoPongMs)
 {
     _webSocketCB = webSocketCB;
     _rawConnSendFn = rawConnSendFn;
     _pingIntervalMs = pingIntervalMs;
     _pingTimeLastMs = 0;
+    _pongRxLastMs = 0;
+    _disconnIfNoPongMs = disconnIfNoPongMs;
     _maskSentData = !roleIsServer;
     _isActive = true;
 }
@@ -79,9 +84,10 @@ void RdWebSocketLink::setup(RdWebSocketCB webSocketCB, RdWebConnSendFn rawConnSe
 void RdWebSocketLink::service()
 {
     static const uint8_t PING_MSG[] = "RIC";
-    // Check for ping
+    // Handle ping / pong
     if (_upgradeRespSent && _pingIntervalMs != 0)
     {
+        // Check if time to send ping
         if (Utils::isTimeout(millis(), _pingTimeLastMs, _pingIntervalMs))
         {
 #ifdef DEBUG_WEBSOCKET_PING_PONG
@@ -89,6 +95,18 @@ void RdWebSocketLink::service()
 #endif
             sendMsg(WEBSOCKET_OPCODE_PING, PING_MSG, sizeof(PING_MSG));
             _pingTimeLastMs = millis();
+        }
+
+        // Check for disconnect on no pong - this intentionally only starts working after
+        // a first pong has been received - this is because older martypy versions did not
+        // correctly handle the pong response
+        if ((_disconnIfNoPongMs != 0) && (_pongRxLastMs != 0) &&
+                 Utils::isTimeout(millis(), _pongRxLastMs, _disconnIfNoPongMs))
+        {
+            LOG_W(MODULE_PREFIX, "service - no PONG received for %ldms (>%dms), link inactive",
+                        Utils::timeElapsed(millis(), _pongRxLastMs),
+                        _disconnIfNoPongMs);
+            _isActive = false;
         }
     }
 }
@@ -418,6 +436,12 @@ uint32_t RdWebSocketLink::handleRxPacketData(const uint8_t *pBuf, uint32_t bufLe
 {
     // Extract header
     extractWSHeaderInfo(pBuf, bufLen);
+#ifdef DEBUG_WEBSOCKET_RX_DETAIL
+    String outStr;
+    Utils::getHexStrFromBytes(pBuf, bufLen, outStr);
+    LOG_I(MODULE_PREFIX, "handleRxPacketData header len %lld dataPos %d bufLen %d data %s", 
+                _wsHeader.len, _wsHeader.dataPos, bufLen, outStr.c_str());
+#endif
     if (_wsHeader.dataPos + _wsHeader.len > bufLen)
         return 0;
 
@@ -472,11 +496,18 @@ uint32_t RdWebSocketLink::handleRxPacketData(const uint8_t *pBuf, uint32_t bufLe
 
             // Send PONG
             sendMsg(WEBSOCKET_OPCODE_PONG, pBuf + _wsHeader.dataPos, _wsHeader.len);
+
+#ifdef DEBUG_WEBSOCKET_PING_PONG
+            LOG_I(MODULE_PREFIX, "handleRxPacketData Rx PING Tx PONG %lld", _wsHeader.len);
+#endif
+
             break;
         }
         case WEBSOCKET_OPCODE_PONG:
         {
             callbackEventCode = WEBSOCKET_EVENT_PONG;
+            _pongRxLastMs = millis();
+
 #ifdef DEBUG_WEBSOCKET_PING_PONG
             LOG_I(MODULE_PREFIX, "handleRxPacketData PONG");
 #endif

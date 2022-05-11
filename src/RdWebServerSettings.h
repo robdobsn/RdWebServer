@@ -29,7 +29,6 @@ public:
         _serverTCPPort = DEFAULT_HTTP_PORT;
         _numConnSlots = 6;
         _enableWebSockets = true;
-        _pingIntervalMs = 1000;
         _enableFileServer = true;
         _taskCore = DEFAULT_TASK_CORE;
         _taskPriority = DEFAULT_TASK_PRIORITY;
@@ -39,7 +38,6 @@ public:
     }
 
     RdWebServerSettings(int port, uint32_t connSlots, bool wsEnable, 
-            uint32_t pingIntervalMs, 
             bool enableFileServer, uint32_t taskCore,
             uint32_t taskPriority, uint32_t taskStackSize,
             uint32_t sendBufferMaxLen,
@@ -48,7 +46,6 @@ public:
         _serverTCPPort = port;
         _numConnSlots = connSlots;
         _enableWebSockets = wsEnable;
-        _pingIntervalMs = pingIntervalMs;
         _enableFileServer = enableFileServer;
         _taskCore = taskCore;
         _taskPriority = taskPriority;
@@ -65,9 +62,6 @@ public:
 
     // Enable websockets
     bool _enableWebSockets;
-
-    // Ping interval for websockets (0 to disable)
-    uint32_t _pingIntervalMs;
 
     // Enable file server
     bool _enableFileServer;

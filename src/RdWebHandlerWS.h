@@ -87,8 +87,10 @@ public:
         RdWebResponder* pResponder = new RdWebResponderWS(this, params, requestHeader.URL, 
                     webServerSettings, _canAcceptRxMsgCB, _rxMsgCB, 
                     _channelIDUsage[wsConnIdxAvailable].channelID,
-                    _wsConfig.getLong("pktMaxBytes", 5000),
-                    _wsConfig.getLong("txQueueMax", 2)
+                    _wsConfig.getLong("pktMaxBytes", 1000),
+                    _wsConfig.getLong("txQueueMax", 10),
+                    _wsConfig.getLong("pingMs", 2000),
+                    _wsConfig.getLong("noPongMs", 5000)
                     );
 
         if (pResponder)

@@ -40,7 +40,8 @@ static const char *MODULE_PREFIX = "RdWebRespWS";
 RdWebResponderWS::RdWebResponderWS(RdWebHandlerWS* pWebHandler, const RdWebRequestParams& params, 
             const String& reqStr, const RdWebServerSettings& webServerSettings,
             RdWebSocketCanAcceptCB canAcceptMsgCB, RdWebSocketMsgCB sendMsgCB,
-            uint32_t channelID, uint32_t packetMaxBytes, uint32_t txQueueSize)
+            uint32_t channelID, uint32_t packetMaxBytes, uint32_t txQueueSize,
+            uint32_t pingIntervalMs, uint32_t disconnIfNoPongMs)
     :   _reqParams(params), _canAcceptMsgCB(canAcceptMsgCB), 
         _sendMsgCB(sendMsgCB), _txQueue(txQueueSize)
 {
@@ -53,7 +54,7 @@ RdWebResponderWS::RdWebResponderWS(RdWebHandlerWS* pWebHandler, const RdWebReque
     // Init socket link
     _webSocketLink.setup(std::bind(&RdWebResponderWS::webSocketCallback, this, 
                             std::placeholders::_1, std::placeholders::_2, std::placeholders::_3),
-                params.getWebConnRawSend(), webServerSettings._pingIntervalMs, true);
+                params.getWebConnRawSend(), pingIntervalMs, true, disconnIfNoPongMs);
 }
 
 RdWebResponderWS::~RdWebResponderWS()

@@ -25,7 +25,8 @@ public:
     virtual ~RdWebSocketLink();
 
     // Setup the web socket
-    void setup(RdWebSocketCB webSocketCB, RdWebConnSendFn rawConnSendFn, uint32_t pingIntervalMs, bool roleIsServer);
+    void setup(RdWebSocketCB webSocketCB, RdWebConnSendFn rawConnSendFn, 
+            uint32_t pingIntervalMs, bool roleIsServer, uint32_t disconnIfNoPongMs);
 
     // Service - called frequently
     void service();
@@ -104,6 +105,8 @@ private:
     // Set _pingIntervalMs to 0 to disable pings from server
     uint32_t _pingIntervalMs;
     uint32_t _pingTimeLastMs;
+    uint32_t _pongRxLastMs;
+    uint32_t _disconnIfNoPongMs;
     
     // Debug
     static const uint32_t MAX_DEBUG_TEXT_STR_LEN = 100;

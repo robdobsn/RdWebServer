@@ -30,7 +30,8 @@ public:
     RdWebResponderWS(RdWebHandlerWS* pWebHandler, const RdWebRequestParams& params,
             const String& reqStr, const RdWebServerSettings& webServerSettings,
             RdWebSocketCanAcceptCB canAcceptMsgCB, RdWebSocketMsgCB sendMsgCB,
-            uint32_t channelID, uint32_t packetMaxBytes, uint32_t txQueueSize);
+            uint32_t channelID, uint32_t packetMaxBytes, uint32_t txQueueSize,
+            uint32_t pingIntervalMs, uint32_t disconnIfNoPongMs);
     virtual ~RdWebResponderWS();
 
     // Service - called frequently
