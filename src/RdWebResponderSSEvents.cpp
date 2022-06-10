@@ -215,7 +215,7 @@ String RdWebResponderSSEvents::generateEventMessage(const String& msgStr, const 
         char *nextR = strchr(lineStart, '\r');
         if (nextN == NULL && nextR == NULL)
         {
-        size_t llen = (pMsg + messageLen) - lineStart;
+            size_t llen = (pMsg + messageLen) - lineStart;
             char *ldata = (char*)malloc(llen + 1);
             if (ldata != NULL)
             {
@@ -226,7 +226,7 @@ String RdWebResponderSSEvents::generateEventMessage(const String& msgStr, const 
                 ev += "\r\n\r\n";
                 free(ldata);
             }
-        lineStart = pMsg + messageLen;
+            lineStart = pMsg + messageLen;
         }
         else
         {
@@ -273,7 +273,7 @@ String RdWebResponderSSEvents::generateEventMessage(const String& msgStr, const 
                 free(ldata);
             }
             lineStart = nextLine;
-        if (lineStart == (pMsg + messageLen))
+            if (lineStart == (pMsg + messageLen))
                 ev += "\r\n";
         }
     } while (lineStart < (pMsg + messageLen));
