@@ -87,5 +87,5 @@ private:
     static const uint32_t MAX_SSEVENT_SEND_RETRY_MS = 1;
 
     // Generate event message
-    String generateEventMessage(const char *pMsg, const char *pEvent, uint32_t id);
+    String generateEventMessage(const String& msgStr, const String& eventStr, uint32_t id);
 };

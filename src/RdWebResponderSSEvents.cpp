@@ -54,7 +54,7 @@ void RdWebResponderSSEvents::service()
         LOG_W(MODULE_PREFIX, "service sendMsg group %s content %s", event.getGroup().c_str(), event.getContent().c_str());
 #endif
         // Format message
-        String outMsg = generateEventMessage(event.getContent().c_str(), event.getGroup().c_str(), time(NULL));
+        String outMsg = generateEventMessage(event.getContent(), event.getGroup(), time(NULL));
         RdWebConnSendFn rawSendFn = _reqParams.getWebConnRawSend();
         if (rawSendFn)
         {
@@ -125,7 +125,7 @@ uint32_t RdWebResponderSSEvents::getResponseNext(uint8_t *pBuf, uint32_t bufMaxL
 #endif
 
         // Return
-        return strlen((char *)pBuf);
+        return strnlen((char *)pBuf, bufMaxLen);
     }
 
     // // Get
@@ -187,7 +187,7 @@ void RdWebResponderSSEvents::sendEvent(const char* eventContent, const char* eve
 // From ESPAsyncWebServer
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-String RdWebResponderSSEvents::generateEventMessage(const char *pMsg, const char *pEvent, uint32_t id)
+String RdWebResponderSSEvents::generateEventMessage(const String& msgStr, const String& eventStr, uint32_t id)
 {
     String ev = "";
 
@@ -205,80 +205,78 @@ String RdWebResponderSSEvents::generateEventMessage(const char *pMsg, const char
         ev += "\r\n";
     }
 
-    if (pMsg != NULL)
+    char* pMsg = msgStr.c_str();
+    size_t messageLen = msgStr.length();
+    char *lineStart = pMsg;
+    char *lineEnd;
+    do
     {
-        size_t messageLen = strlen(pMsg);
-        char *lineStart = (char *)pMsg;
-        char *lineEnd;
-        do
+        char *nextN = strchr(lineStart, '\n');
+        char *nextR = strchr(lineStart, '\r');
+        if (nextN == NULL && nextR == NULL)
         {
-            char *nextN = strchr(lineStart, '\n');
-            char *nextR = strchr(lineStart, '\r');
-            if (nextN == NULL && nextR == NULL)
+        size_t llen = (pMsg + messageLen) - lineStart;
+            char *ldata = (char*)malloc(llen + 1);
+            if (ldata != NULL)
             {
-                size_t llen = ((char*)pMsg + messageLen) - lineStart;
-                char *ldata = (char*)malloc(llen + 1);
-                if (ldata != NULL)
-                {
-                    memcpy(ldata, lineStart, llen);
-                    ldata[llen] = 0;
-                    ev += "data: ";
-                    ev += ldata;
-                    ev += "\r\n\r\n";
-                    free(ldata);
-                }
-                lineStart = (char*)pMsg + messageLen;
+                memcpy(ldata, lineStart, llen);
+                ldata[llen] = 0;
+                ev += "data: ";
+                ev += ldata;
+                ev += "\r\n\r\n";
+                free(ldata);
             }
-            else
+        lineStart = pMsg + messageLen;
+        }
+        else
+        {
+            char *nextLine = NULL;
+            if (nextN != NULL && nextR != NULL)
             {
-                char *nextLine = NULL;
-                if (nextN != NULL && nextR != NULL)
+                if (nextR < nextN)
                 {
-                    if (nextR < nextN)
-                    {
-                        lineEnd = nextR;
-                        if (nextN == (nextR + 1))
-                            nextLine = nextN + 1;
-                        else
-                            nextLine = nextR + 1;
-                    }
+                    lineEnd = nextR;
+                    if (nextN == (nextR + 1))
+                        nextLine = nextN + 1;
                     else
-                    {
-                        lineEnd = nextN;
-                        if (nextR == (nextN + 1))
-                            nextLine = nextR + 1;
-                        else
-                            nextLine = nextN + 1;
-                    }
-                }
-                else if (nextN != NULL)
-                {
-                    lineEnd = nextN;
-                    nextLine = nextN + 1;
+                        nextLine = nextR + 1;
                 }
                 else
                 {
-                    lineEnd = nextR;
-                    nextLine = nextR + 1;
+                    lineEnd = nextN;
+                    if (nextR == (nextN + 1))
+                        nextLine = nextR + 1;
+                    else
+                        nextLine = nextN + 1;
                 }
-
-                size_t llen = lineEnd - lineStart;
-                char *ldata = (char *)malloc(llen + 1);
-                if (ldata != NULL)
-                {
-                    memcpy(ldata, lineStart, llen);
-                    ldata[llen] = 0;
-                    ev += "data: ";
-                    ev += ldata;
-                    ev += "\r\n";
-                    free(ldata);
-                }
-                lineStart = nextLine;
-                if (lineStart == ((char*)pMsg + messageLen))
-                    ev += "\r\n";
             }
-        } while (lineStart < ((char*)pMsg + messageLen));
-    }
+            else if (nextN != NULL)
+            {
+                lineEnd = nextN;
+                nextLine = nextN + 1;
+            }
+            else
+            {
+                lineEnd = nextR;
+                nextLine = nextR + 1;
+            }
+
+            size_t llen = lineEnd - lineStart;
+            char *ldata = (char *)malloc(llen + 1);
+            if (ldata != NULL)
+            {
+                memcpy(ldata, lineStart, llen);
+                ldata[llen] = 0;
+                ev += "data: ";
+                ev += ldata;
+                ev += "\r\n";
+                free(ldata);
+            }
+            lineStart = nextLine;
+        if (lineStart == (pMsg + messageLen))
+                ev += "\r\n";
+        }
+    } while (lineStart < (pMsg + messageLen));
 
     return ev;
 }

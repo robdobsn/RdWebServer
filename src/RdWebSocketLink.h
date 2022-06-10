@@ -107,6 +107,7 @@ private:
     uint32_t _pingTimeLastMs;
     uint32_t _pongRxLastMs;
     uint32_t _disconnIfNoPongMs;
+    bool _warnNoPongShown = false;
     
     // Debug
     static const uint32_t MAX_DEBUG_TEXT_STR_LEN = 100;

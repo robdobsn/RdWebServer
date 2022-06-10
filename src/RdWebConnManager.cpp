@@ -380,6 +380,9 @@ void RdWebConnManager::serverSideEventsSendMsg(const char *eventContent, const c
 bool RdWebConnManager::handleNewConnection(RdClientConnBase* pClientConn)
 {
 #ifndef ESP8266
+#ifdef DEBUG_WEB_CONN_MANAGER
+    LOG_I(MODULE_PREFIX, "handleNewConnection %d", pClientConn->getClientId());
+#endif
     // Add to queue for handling
     return xQueueSendToBack(_newConnQueue, &pClientConn, pdMS_TO_TICKS(10)) == pdTRUE;
 #else  // ESP8266

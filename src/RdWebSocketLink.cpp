@@ -103,9 +103,13 @@ void RdWebSocketLink::service()
         if ((_disconnIfNoPongMs != 0) && (_pongRxLastMs != 0) &&
                  Utils::isTimeout(millis(), _pongRxLastMs, _disconnIfNoPongMs))
         {
-            LOG_W(MODULE_PREFIX, "service - no PONG received for %ldms (>%dms), link inactive",
+            if (!_warnNoPongShown)
+            {
+                LOG_W(MODULE_PREFIX, "service - no PONG received for %ldms (>%dms), link inactive",
                         Utils::timeElapsed(millis(), _pongRxLastMs),
                         _disconnIfNoPongMs);
+                _warnNoPongShown = true;
+            }
             _isActive = false;
         }
     }
@@ -507,6 +511,7 @@ uint32_t RdWebSocketLink::handleRxPacketData(const uint8_t *pBuf, uint32_t bufLe
         {
             callbackEventCode = WEBSOCKET_EVENT_PONG;
             _pongRxLastMs = millis();
+            _warnNoPongShown = false;
 
 #ifdef DEBUG_WEBSOCKET_PING_PONG
             LOG_I(MODULE_PREFIX, "handleRxPacketData PONG");

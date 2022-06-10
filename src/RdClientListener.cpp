@@ -119,7 +119,7 @@ void RdClientListener::listenForClients(int port, uint32_t numConnSlots)
                 {
                     // Debug
     #ifdef DEBUG_NEW_CONNECTION
-                    LOG_I(MODULE_PREFIX, "listen NEW CONN REJECTED %d", (uint32_t)pNewConnection);
+                    LOG_I(MODULE_PREFIX, "listen NEW CONN REJECTED %p", pClientConn);
     #endif
                     // No room so delete (which closes the connection)
                     delete pClientConn;
@@ -129,7 +129,7 @@ void RdClientListener::listenForClients(int port, uint32_t numConnSlots)
 
                     // Debug
     #ifdef DEBUG_NEW_CONNECTION
-                    LOG_I(MODULE_PREFIX, "listen NEW CONN ACCEPTED %d", (uint32_t)pNewConnection);
+                    LOG_I(MODULE_PREFIX, "listen NEW CONN ACCEPTED %p", pClientConn);
     #endif
                 }
             }

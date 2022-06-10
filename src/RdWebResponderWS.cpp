@@ -72,6 +72,13 @@ void RdWebResponderWS::service()
     // Service the link
     _webSocketLink.service();
 
+    // Check if line active
+    if (!_webSocketLink.isActive())
+    {
+        _isActive = false;
+        return;
+    }
+
     // Check for data waiting to be sent
     RdWebDataFrame frame;
     if (_txQueue.get(frame))

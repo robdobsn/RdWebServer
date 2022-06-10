@@ -764,8 +764,8 @@ bool RdWebConnection::parseHeaderLine(const String& line)
         // Check if continue required
         if (_header.isContinue)
         {
-            const char *response = "HTTP/1.1 100 Continue\r\n\r\n";
-            if (rawSendOnConn((const uint8_t*) response, strlen(response), MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
+            const char response[] = "HTTP/1.1 100 Continue\r\n\r\n";
+            if (rawSendOnConn((const uint8_t*) response, sizeof(response)-1, MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
                 return false;
         }
 
@@ -1030,10 +1030,10 @@ RdWebConnSendRetVal RdWebConnection::rawSendOnConn(const uint8_t* pBuf, uint32_t
 bool RdWebConnection::sendStandardHeaders()
 {
     // Send the first line
-    char respLine[100];
+    char respLine[200];
     snprintf(respLine, sizeof(respLine), "HTTP/1.1 %d %s\r\n", _httpResponseStatus, 
                 RdWebInterface::getHTTPStatusStr(_httpResponseStatus));
-    if (rawSendOnConn((const uint8_t*)respLine, strlen(respLine), MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
+    if (rawSendOnConn((const uint8_t*)respLine, strnlen(respLine, sizeof(respLine)), MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
         return false;
 
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
@@ -1045,7 +1045,7 @@ bool RdWebConnection::sendStandardHeaders()
     if (_pResponder && _pResponder->getContentType())
     {
         snprintf(respLine, sizeof(respLine), "Content-Type: %s\r\n", _pResponder->getContentType());
-        if (rawSendOnConn((const uint8_t*)respLine, strlen(respLine), MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
+        if (rawSendOnConn((const uint8_t*)respLine, strnlen(respLine, sizeof(respLine)), MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
             return false;
 
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
@@ -1061,7 +1061,7 @@ bool RdWebConnection::sendStandardHeaders()
         for (RdJson::NameValuePair& nvPair : *pRespHeaders)
         {
             snprintf(respLine, sizeof(respLine), "%s: %s\r\n", nvPair.name.c_str(), nvPair.value.c_str());
-            if (rawSendOnConn((const uint8_t*)respLine, strlen(respLine), MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
+            if (rawSendOnConn((const uint8_t*)respLine, strnlen(respLine, sizeof(respLine)), MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
                 return false;
 
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
@@ -1078,7 +1078,7 @@ bool RdWebConnection::sendStandardHeaders()
         for (RdJson::NameValuePair& nvPair : *pRespHeaders)
         {
             snprintf(respLine, sizeof(respLine), "%s: %s\r\n", nvPair.name.c_str(), nvPair.value.c_str());
-            if (rawSendOnConn((const uint8_t*)respLine, strlen(respLine), MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
+            if (rawSendOnConn((const uint8_t*)respLine, strnlen(respLine, sizeof(respLine)), MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
                 return false;
 
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
@@ -1095,7 +1095,7 @@ bool RdWebConnection::sendStandardHeaders()
         if (contentLength >= 0)
         {
             snprintf(respLine, sizeof(respLine), "Content-Length: %d\r\n", contentLength);
-            if (rawSendOnConn((const uint8_t*)respLine, strlen(respLine), MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
+            if (rawSendOnConn((const uint8_t*)respLine, strnlen(respLine, sizeof(respLine)), MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
                 return false;
 
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
@@ -1109,7 +1109,7 @@ bool RdWebConnection::sendStandardHeaders()
     if (!_pResponder || !_pResponder->leaveConnOpen())
     {
         snprintf(respLine, sizeof(respLine), "Connection: close\r\n");
-        if (rawSendOnConn((const uint8_t*)respLine, strlen(respLine), MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
+        if (rawSendOnConn((const uint8_t*)respLine, strnlen(respLine, sizeof(respLine)), MAX_HEADER_SEND_RETRY_MS) != RdWebConnSendRetVal::WEB_CONN_SEND_OK)
             return false;
 
 #ifdef DEBUG_RESPONDER_HEADER_DETAIL
